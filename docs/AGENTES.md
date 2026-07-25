@@ -27,8 +27,8 @@ a velocidade.
 |---|---|---|
 | `arquiteto` | Decisões transversais, ADR, arbitragem de fronteiras | `docs/ARQUITETURA.md`, `docs/adr/**`, `.claude/**` |
 | `api-contract` | Contrato OpenAPI, compatibilidade, geração de clientes | `docs/api/**` |
-| `backend-platform` | Build, config, segurança, erros, rate limiting, eventos, observabilidade | `backend/pom.xml`, `platform/**`, `config/**`, `application*.yml` |
-| `backend-domain` | users, providers, requests, proposals, bookings, reviews | `backend/**/modules/{esses}/**` |
+| `backend-platform` | Build, config, segurança, erros, rate limiting, eventos, observabilidade; módulos transversais `uploads` e `notifications`; `package-info.java` de **todos** os módulos | `backend/pom.xml`, `platform/**`, `config/**`, `application*.yml`, `modules/{uploads,notifications}/**`, `modules/*/package-info.java` |
+| `backend-domain` | users, providers, requests, proposals, bookings, reviews, categories, chat | `backend/**/modules/{esses}/**` |
 | `backend-matching` | Matching geográfico, geocodificação, pesquisa FTS | `backend/**/modules/{matching,geo,search}/**` |
 | `backend-payments` | Subscrições, gateways, webhooks, reconciliação | `backend/**/modules/{billing,payments}/**` |
 | `db-migrations` | Schema PostgreSQL/PostGIS e migrações Flyway | `backend/src/main/resources/db/migration/**` |
@@ -37,6 +37,20 @@ a velocidade.
 | `platform-infra` | docker-compose, realm Keycloak, CI/CD, segredos | `infra/**`, `.github/workflows/**` |
 | `security-auditor` | Auditoria (só leitura) | — |
 | `qa-e2e` | Testes de integração e E2E transversais | `backend/src/test/**`, `e2e/**` |
+
+**Módulos acrescentados depois da Onda 0** (as sete operações do contrato v1.0.0
+que ficaram sem dono; ver `CLAUDE.md` §3 para o mapa endpoint → módulo):
+`categories` e `chat` para o `backend-domain`, `uploads` e `notifications` para o
+`backend-platform`. `GET /v1/app/version-status` não é módulo — vive em
+`platform/appversion`, porque as regras são configuração e não têm tabela.
+
+Critério aplicado: o módulo fica com o agente que já detém a **regra que o
+governa**. `chat` nasce de `ProposalAccepted` e é bloqueado pelo *gating* de
+subscrição, ambos já invariantes do `backend-domain`; `categories` é lido em
+tempo de compilação por `providers` e `requests`, do mesmo agente. `uploads` e
+`notifications` não têm semântica de domínio e concentram invariantes de
+segurança e integrações externas (*magic bytes*, URL assinado, FCM/email,
+segredos), que são do `backend-platform`.
 
 ## 3. Ondas
 
@@ -76,6 +90,23 @@ ficheiros do outro.
 **Porta de saída:** build verde por área, testes de módulo a passar, nenhuma
 violação de fronteira.
 
+### Onda 1b — depois de integrada a Onda 1
+
+Os módulos atribuídos depois da Onda 0 (`categories`, `chat`, `uploads`,
+`notifications` e `platform/appversion`) implementam-se aqui, não em paralelo com
+a Onda 1: `chat` depende do evento `ProposalAccepted` de `proposals` e
+`notifications` subscreve eventos dos três agentes de backend. Antecipá-los
+significaria escrever contra tipos de evento que ainda estão a mudar.
+
+Ordem dentro da onda: `backend-platform` cria os `package-info.java` dos quatro
+módulos e entrega `uploads` primeiro — `chat` e `requests` dependem da sua API
+pública para anexos. Depois, `categories` + `chat` (`backend-domain`) e
+`notifications` (`backend-platform`) correm em paralelo.
+
+**Porta de saída:** as sete operações do contrato v1.0.0 sem dono passam a ter
+implementação e teste; `ApplicationModules.verify()` verde com as fronteiras
+novas declaradas.
+
 ### Onda 2 — paralela, verificação
 
 - `qa-e2e` — integração transversal com infraestrutura real e E2E dos fluxos
@@ -95,9 +126,15 @@ violação de fronteira.
    que as aplica, valida a compatibilidade e anuncia; os consumidores regeneram.
 4. **Migrações pedem-se ao `db-migrations`**, que atribui a numeração. É o que
    evita duas migrações `V7__`.
-5. **Cada agente entrega o ramo verde**: compila, lint limpo, testes a passar. Um
+5. **Fronteiras de módulo declara-as o `backend-platform`.** Os
+   `package-info.java` com `@ApplicationModule` — incluindo `allowedDependencies`
+   — são dele, mesmo nos módulos que outro agente implementa. Um agente que
+   precise de uma dependência de módulo nova pede-a com motivo. Se cada agente
+   pudesse alargar as suas próprias dependências, `ApplicationModules.verify()`
+   deixaria de verificar o que quer que fosse.
+6. **Cada agente entrega o ramo verde**: compila, lint limpo, testes a passar. Um
    ramo vermelho bloqueia os outros e anula o ganho do paralelismo.
-6. **Isolamento**: um *git worktree* por agente quando correrem em simultâneo na
+7. **Isolamento**: um *git worktree* por agente quando correrem em simultâneo na
    mesma máquina, e uma branch `feat/<agente>/<assunto>` por unidade de trabalho.
 
 ## 5. Invocação

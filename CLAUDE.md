@@ -52,10 +52,10 @@ Um caminho tem **um único agente com direito de escrita**. Os restantes podem l
 |---|---|
 | `docs/ARQUITETURA.md`, `docs/adr/**` | `arquiteto` |
 | `docs/api/**` | `api-contract` |
-| `backend/pom.xml`, `backend/**/config/**`, `backend/**/platform/**`, `backend/src/main/resources/application*.yml` | `backend-platform` |
-| `backend/**/modules/{users,providers,requests,proposals,bookings,reviews}/**` | `backend-domain` |
-| `backend/**/modules/{matching,geo,search}/**` | `backend-matching` |
-| `backend/**/modules/{billing,payments}/**` | `backend-payments` |
+| `backend/pom.xml`, `backend/**/config/**`, `backend/**/platform/**`, `backend/src/main/resources/application*.yml`, `backend/**/modules/{uploads,notifications}/**`, `backend/**/modules/*/package-info.java` | `backend-platform` |
+| `backend/**/modules/{users,providers,requests,proposals,bookings,reviews,categories,chat}/**` — exceto `package-info.java` | `backend-domain` |
+| `backend/**/modules/{matching,geo,search}/**` — exceto `package-info.java` | `backend-matching` |
+| `backend/**/modules/{billing,payments}/**` — exceto `package-info.java` | `backend-payments` |
 | `backend/src/main/resources/db/migration/**` | `db-migrations` |
 | `backend/src/test/**` (testes de integração transversais) | `qa-e2e` |
 | `web/**` | `web-frontend` |
@@ -67,6 +67,27 @@ Um caminho tem **um único agente com direito de escrita**. Os restantes podem l
 `mobile/pubspec.yaml`) são pontos de conflito garantidos. Regra: quem precisa de
 uma dependência nova **pede-a** ao proprietário do ficheiro em vez de a
 adicionar. Nunca dois agentes editam o mesmo POM na mesma onda.
+
+**Todo o endpoint do contrato tem um módulo dono.** Regra de colocação: endpoint
+com **estado persistido** → módulo em `modules/`; endpoint **derivado apenas de
+configuração** → `platform/`. Daí `GET /v1/app/version-status` viver em
+`platform/appversion` (regras por configuração, sem tabela) e não ser módulo.
+Mapa das capacidades que não estavam atribuídas:
+
+| Endpoint | Módulo | Agente |
+|---|---|---|
+| `GET /v1/categories` | `modules/categories` | `backend-domain` |
+| `GET`/`POST /v1/conversations/{id}/messages` | `modules/chat` | `backend-domain` |
+| `POST /v1/uploads` | `modules/uploads` | `backend-platform` |
+| `POST`/`DELETE /v1/device-tokens` | `modules/notifications` | `backend-platform` |
+| `GET /v1/app/version-status` | `platform/appversion` | `backend-platform` |
+
+**`package-info.java` é declaração de fronteira, não implementação.** O
+`@ApplicationModule` (nome, `allowedDependencies`, interfaces nomeadas) é escrito
+**apenas** pelo `backend-platform`, inclusive dentro de módulos de outros agentes.
+Nenhum agente alarga as suas próprias dependências permitidas — precisas de uma
+dependência de módulo nova, pedes, com motivo. É o que impede que
+`ApplicationModules.verify()` passe a ser auto-certificação.
 
 ## 4. Invariantes de segurança (não negociáveis)
 

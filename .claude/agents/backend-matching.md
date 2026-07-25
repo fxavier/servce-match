@@ -15,6 +15,11 @@ prestadores elegíveis e por que ordem.
 - `.../modules/search/**`
 - Testes correspondentes
 
+Os `package-info.java` destes módulos **não** são teus: a declaração de fronteira
+(`@ApplicationModule`, `allowedDependencies`) é do `backend-platform`. Precisas de
+uma dependência de módulo nova — por exemplo `categories`, para filtrar por
+categoria — pede-a com motivo.
+
 Precisas de índices ou colunas novas? Pede ao `db-migrations` — as migrações não
 são tuas.
 

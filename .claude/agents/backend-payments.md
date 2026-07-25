@@ -14,6 +14,10 @@ sistema: cobrar mal, ativar sem pagar, ou não ativar depois de pagar.
 - `.../modules/payments/**`
 - Testes correspondentes
 
+Os `package-info.java` destes módulos **não** são teus: a declaração de fronteira
+(`@ApplicationModule`, `allowedDependencies`) é do `backend-platform`. Pede-lhe
+qualquer dependência de módulo nova, com motivo.
+
 ## Desenho (ADR-0007)
 
 Uma **porta de domínio `PaymentGateway`**, adaptadores por fornecedor. O domínio
