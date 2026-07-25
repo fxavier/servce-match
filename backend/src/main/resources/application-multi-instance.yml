@@ -1,0 +1,18 @@
+# Perfil "multi-instance" (ADR-0006): ativa Redis como backend partilhado
+# para rate limiting e idempotência, obrigatório quando há mais de uma
+# instância do backend atrás de um load balancer.
+#
+# Ativação: SPRING_PROFILES_ACTIVE=multi-instance (além do perfil de
+# ambiente, ex. "prod"). As credenciais/host do Redis continuam a vir de
+# spring.data.redis.* (variáveis de ambiente), definidas em application.yml.
+
+servimatch:
+  rate-limit:
+    backend: redis
+  idempotency:
+    backend: redis
+
+management:
+  health:
+    redis:
+      enabled: true

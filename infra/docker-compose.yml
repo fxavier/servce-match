@@ -1,0 +1,154 @@
+name: servimatch
+
+# Ambiente local do ServiMatch. `docker compose up` deixa o sistema
+# utilizável com um comando, incluindo o realm Keycloak já importado
+# (docs/AGENTES.md, Onda 0 / porta de saída de platform-infra).
+#
+# Como correr (a partir da raiz do repositório, para apanhar o .env raiz):
+#   docker compose -f infra/docker-compose.yml --env-file .env up -d
+#
+# Redis é opcional em instância única e obrigatório em multi-instância
+# (ADR-0006). Fica atrás do perfil "redis" para tornar essa decisão
+# explícita em vez de arrancar sempre por omissão:
+#   docker compose -f infra/docker-compose.yml --env-file .env --profile redis up -d
+#
+# `down && up` tem de devolver um estado funcional sem passos manuais —
+# os healthchecks e `depends_on: condition: service_healthy` garantem a
+# ordem de arranque; os volumes nomeados garantem que só `down -v` apaga
+# dados.
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: servimatch-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-servimatch}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-servimatch}
+      POSTGRES_DB: ${POSTGRES_DB:-servimatch}
+      # Bases de dados extra criadas por infra/postgres/init/001-create-databases.sh
+      POSTGRES_MULTIPLE_DATABASES: keycloak
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-servimatch} -d ${POSTGRES_DB:-servimatch}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks: [servimatch-net]
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.0
+    container_name: servimatch-keycloak
+    restart: unless-stopped
+    command: ["start-dev", "--import-realm"]
+    environment:
+      # Identidade delegada a Keycloak (ADR-0002) — o backend nunca gere
+      # passwords/tokens próprios; este é o único IdP.
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: ${POSTGRES_USER:-servimatch}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-servimatch}
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+      # Bootstrap admin do realm "master" (consola de administração).
+      # Só para desenvolvimento local; nunca reutilizado noutro ambiente
+      # e nunca commitado — vem do .env (gitignored).
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+    ports:
+      - "${KEYCLOAK_PORT:-8081}:8080"
+    volumes:
+      - ./keycloak/realm-servimatch.json:/opt/keycloak/data/import/realm-servimatch.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # A imagem do Keycloak não tem curl; usa-se o /dev/tcp do bash contra
+      # o endpoint de health do interface de gestão (porta 9000, ativado
+      # por KC_HEALTH_ENABLED).
+      test:
+        - "CMD-SHELL"
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          echo -e 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          cat <&3 | grep -q '"status": "UP"'
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks: [servimatch-net]
+
+  redis:
+    image: redis:8.8.1-alpine
+    container_name: servimatch-redis
+    restart: unless-stopped
+    profiles: ["redis", "multi-instance"]
+    command: ["redis-server", "--appendonly", "no"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    networks: [servimatch-net]
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: servimatch-minio
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-servimatch}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-servimatch123}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks: [servimatch-net]
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    container_name: servimatch-minio-init
+    restart: "no"
+    entrypoint: ["/bin/sh", "/init/init-buckets.sh"]
+    environment:
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-servimatch}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-servimatch123}
+      MINIO_BUCKET_UPLOADS: ${MINIO_BUCKET_UPLOADS:-servimatch-uploads}
+    volumes:
+      - ./minio/init-buckets.sh:/init/init-buckets.sh:ro
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks: [servimatch-net]
+
+networks:
+  servimatch-net:
+    name: servimatch-net
+
+volumes:
+  postgres-data:
+    name: servimatch-postgres-data
+  redis-data:
+    name: servimatch-redis-data
+  minio-data:
+    name: servimatch-minio-data

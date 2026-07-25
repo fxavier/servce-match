@@ -1,0 +1,52 @@
+# Configuração para a suíte de testes do esqueleto (Onda 0).
+#
+# Os testes deste módulo (segurança, modularidade) não devem depender de
+# infraestrutura externa (Postgres, Keycloak, Redis) a correr — isso é o
+# papel das suítes de integração com Testcontainers que os agentes
+# `db-migrations`/`qa-e2e` e os módulos de domínio trarão depois de o
+# esquema e os módulos existirem. Por isso a fonte de dados e o Flyway
+# ficam excluídos aqui; o Event Publication Registry (que depende de uma
+# fonte de dados) fica inativo em consequência — comportamento esperado
+# para estes testes.
+spring:
+  modulith:
+    # Tem de ser repetido aqui: os recursos de teste sombreiam por completo
+    # (não fazem merge com) src/main/resources/application.yml no
+    # classpath de teste.
+    detection-strategy: explicitly-annotated
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
+      - org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration
+      # O auto-config JDBC do Event Publication Registry exige um DataSource
+      # incondicionalmente (não degrada sozinho na ausência de um). Sem
+      # base de dados nestes testes, desligamos também este — o registo de
+      # eventos persistente é coberto pelas suítes de integração, não aqui.
+      - org.springframework.modulith.events.jdbc.JdbcEventPublicationAutoConfiguration
+
+servimatch:
+  security:
+    jwt:
+      # URIs sintaticamente válidos mas não contactados durante estes
+      # testes: a validação de JWT em si (contra um Keycloak real) é
+      # coberta pelos testes de integração dos módulos de domínio.
+      jwk-set-uri: https://keycloak.test.invalid/realms/servimatch/protocol/openid-connect/certs
+      issuer-uri: https://keycloak.test.invalid/realms/servimatch
+      expected-audience: servimatch-backend
+      roles-claim: realm_access.roles
+  rate-limit:
+    enabled: true
+    capacity: 1000
+    refill-period: PT1M
+    backend: in-memory
+  idempotency:
+    backend: in-memory
+
+management:
+  tracing:
+    sampling:
+      probability: 0.0
+  health:
+    redis:
+      enabled: false

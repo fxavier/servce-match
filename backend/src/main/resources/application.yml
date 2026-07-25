@@ -1,0 +1,143 @@
+# Configuração base do backend ServiMatch.
+#
+# Nenhum segredo aqui: tudo o que é sensível vem de variável de ambiente
+# (ver backend/.env.example). Perfis:
+#   - (nenhum / omissão) — single-instance (ADR-0006): rate limiting e
+#     idempotência em memória.
+#   - multi-instance      — ativa Redis para rate limiting e idempotência
+#     (ver application-multi-instance.yml).
+#
+# Ownership: pt.servimatch.platform / pt.servimatch.config (agente
+# backend-platform). Módulos de domínio não editam este ficheiro; pedem
+# propriedades novas ao dono.
+
+spring:
+  application:
+    name: servimatch-backend
+
+  # ---------------------------------------------------------------------
+  # Spring Modulith (ADR-0001)
+  # ---------------------------------------------------------------------
+  modulith:
+    detection-strategy: explicitly-annotated
+    events:
+      jdbc:
+        schema-initialization:
+          # O esquema do Event Publication Registry é gerido por Flyway
+          # (agente db-migrations), não por auto-inicialização — "zero
+          # alterações manuais de esquema" (docs/ARQUITETURA.md §5.6).
+          enabled: false
+      # Entrega at-least-once: reprocessa publicações incompletas no
+      # arranque. Handlers @ApplicationModuleListener têm de ser
+      # idempotentes.
+      republish-outstanding-events-on-restart: true
+      completion-mode: UPDATE
+      staleness:
+        published: PT1H
+        processing: PT30M
+        resubmitted: PT2H
+
+  # ---------------------------------------------------------------------
+  # Base de dados (PostgreSQL + PostGIS) e migrações (Flyway; ficheiros
+  # geridos pelo agente db-migrations em src/main/resources/db/migration)
+  # ---------------------------------------------------------------------
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/servimatch}
+    username: ${DB_USERNAME:servimatch}
+    password: ${DB_PASSWORD:servimatch}
+    hikari:
+      # Não bloquear/falhar o arranque se a base de dados ainda não estiver
+      # pronta (ordem de arranque do docker-compose); a primeira operação
+      # real é que acusa a falha.
+      initialization-fail-timeout: -1
+  flyway:
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+
+  # ---------------------------------------------------------------------
+  # Redis (ADR-0006): sempre configurável; só usado quando
+  # servimatch.rate-limit.backend=redis ou servimatch.idempotency.backend=redis.
+  # ---------------------------------------------------------------------
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+
+# ---------------------------------------------------------------------
+# Segurança — OAuth2 Resource Server (ADR-0002/0009)
+# ---------------------------------------------------------------------
+servimatch:
+  security:
+    jwt:
+      # jwk-set-uri aponta diretamente para o JWKS do realm — evita uma
+      # descoberta OIDC síncrona no arranque (ver SecurityConfig).
+      jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://localhost:8081/realms/servimatch/protocol/openid-connect/certs}
+      issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8081/realms/servimatch}
+      expected-audience: ${KEYCLOAK_AUDIENCE:servimatch-backend}
+      roles-claim: realm_access.roles
+
+  # -------------------------------------------------------------------
+  # Rate limiting (Bucket4j, ADR-0006) — limite global por cliente.
+  # Limites mais apertados por endpoint ficam ao critério de cada módulo
+  # via RateLimiterService.
+  # -------------------------------------------------------------------
+  rate-limit:
+    enabled: true
+    capacity: 120
+    refill-period: PT1M
+    backend: in-memory
+
+  # -------------------------------------------------------------------
+  # Idempotência (Idempotency-Key em escritas não idempotentes)
+  # -------------------------------------------------------------------
+  idempotency:
+    header-name: Idempotency-Key
+    retention: P1D
+    backend: in-memory
+
+  # -------------------------------------------------------------------
+  # Housekeeping do Event Publication Registry
+  # -------------------------------------------------------------------
+  events:
+    completed-retention: P7D
+    purge-cron: "0 15 3 * * *"
+
+# ---------------------------------------------------------------------
+# Observabilidade
+# ---------------------------------------------------------------------
+management:
+  endpoints:
+    web:
+      exposure:
+        # Endpoints sensíveis (env, beans, configprops, heapdump, ...)
+        # ficam fechados por omissão — só o estritamente necessário à
+        # orquestração e a scraping de métricas é exposto.
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  health:
+    # Redis só é usado quando um backend=redis está ativo (ver
+    # application-multi-instance.yml, que reativa este indicador).
+    redis:
+      enabled: false
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+
+logging:
+  structured:
+    format:
+      console: logstash
+  level:
+    root: INFO
+    pt.servimatch: INFO
+
+server:
+  port: ${SERVER_PORT:8080}

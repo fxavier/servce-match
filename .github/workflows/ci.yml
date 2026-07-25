@@ -1,0 +1,232 @@
+name: CI
+
+# Pipeline base do ServiMatch (docs/AGENTES.md, Onda 0 / platform-infra).
+#
+# Cada job de código de aplicação (backend/web/mobile) é condicional à
+# existência do respetivo diretório: nas primeiras ondas, esses módulos
+# ainda estão a ser criados em paralelo por outros agentes, e este workflow
+# tem de ficar correto *quando* existirem, sem falhar por ausência deles
+# agora. O job `detect` faz essa deteção uma única vez.
+#
+# O árbitro entre agentes que trabalham em paralelo é este CI: se ficar
+# lento ou instável, o paralelismo do monorepo deixa de funcionar.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  MAVEN_OPTS: -Dhttps.protocols=TLSv1.2 -Dmaven.wagon.httpconnectionManager.ttlSeconds=120
+  REDOCLY_CLI_VERSION: "2.40.0"
+
+jobs:
+  # ---------------------------------------------------------------------
+  # Deteta quais das árvores de código (backend/web/mobile) já existem no
+  # commit em avaliação. Corre sempre, é rápido e não depende de rede
+  # além do checkout.
+  # ---------------------------------------------------------------------
+  detect:
+    name: Detect workspaces
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.check.outputs.backend }}
+      web: ${{ steps.check.outputs.web }}
+      mobile: ${{ steps.check.outputs.mobile }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - id: check
+        run: |
+          {
+            echo "backend=$( [ -f backend/pom.xml ] && echo true || echo false )"
+            echo "web=$( [ -f web/package.json ] && echo true || echo false )"
+            echo "mobile=$( [ -f mobile/pubspec.yaml ] && echo true || echo false )"
+          } >> "$GITHUB_OUTPUT"
+          echo "--- Workspaces detetados neste commit ---"
+          cat "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------
+  # 1. Build do backend + testes.
+  # 2. Verificação de fronteiras do Spring Modulith.
+  # Só corre quando backend/pom.xml existir (backend-platform, Onda 0).
+  # Testcontainers (PostGIS, Keycloak, Redis, MinIO) usa o Docker já
+  # disponível por omissão nos runners `ubuntu-latest` — nenhum serviço
+  # externo é necessário para além do próprio runner.
+  # ---------------------------------------------------------------------
+  backend:
+    name: Backend (build, test, module boundaries)
+    needs: detect
+    if: needs.detect.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5.6.0
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+
+      - name: Build and test (mvn verify)
+        working-directory: backend
+        run: mvn -B -ntp verify
+
+      - name: Verify Spring Modulith module boundaries
+        working-directory: backend
+        # A verificação real é o teste JUnit ApplicationModules.verify()
+        # (já correu dentro de `mvn verify` acima); este passo torna-a
+        # visível como um resultado próprio no pipeline e falha alto e
+        # cedo se essa suite de testes ainda não existir.
+        run: |
+          if ! grep -rlq "ApplicationModules" src/test 2>/dev/null; then
+            echo "::error::Não foi encontrado nenhum teste ApplicationModules.verify() em backend/src/test. A verificação de fronteiras do Spring Modulith é obrigatória (docs/ARQUITETURA.md §5.6/§17)."
+            exit 1
+          fi
+          mvn -B -ntp test -Dtest='*ModularityTests,*ApplicationModules*' -DfailIfNoTests=false
+
+      - name: Upload surefire/failsafe reports
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: backend-test-reports
+          path: |
+            backend/target/surefire-reports
+            backend/target/failsafe-reports
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # ---------------------------------------------------------------------
+  # 3. Validação de docs/api/openapi.yaml + verificação de compatibilidade
+  #    retroativa contra o contrato do ramo principal.
+  # Não depende de backend/web/mobile existirem — o contrato já existe
+  # desde a Onda 0 (api-contract) e é o ponto de acordo entre todos.
+  # ---------------------------------------------------------------------
+  api-contract:
+    name: OpenAPI contract (lint + breaking changes)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Lint docs/api/openapi.yaml (Redocly)
+        run: npx --yes "@redocly/cli@${REDOCLY_CLI_VERSION}" lint docs/api/openapi.yaml
+
+      - name: Check backward compatibility against main
+        # Só faz sentido comparar contra main num PR; num push a main não
+        # há "outro lado" para comparar (é o próprio main a mover-se).
+        # `review: false` mantém a verificação sem dependência de rede
+        # pública: corre inteiramente no runner, sem publicar o diff.
+        if: github.event_name == 'pull_request'
+        uses: oasdiff/oasdiff-action/breaking@v0.1.9
+        with:
+          base: "origin/main:docs/api/openapi.yaml"
+          revision: "docs/api/openapi.yaml"
+          fail-on: ERR
+          review: "false"
+
+  # ---------------------------------------------------------------------
+  # 4. Build + lint + testes do web.
+  # Só corre quando web/package.json existir (web-frontend).
+  # ---------------------------------------------------------------------
+  web:
+    name: Web (lint, build, test)
+    needs: detect
+    if: needs.detect.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: "22.20.0"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Lint
+        working-directory: web
+        run: npm run lint
+
+      - name: Test
+        working-directory: web
+        run: npm test -- --run
+
+      - name: Build
+        working-directory: web
+        run: npm run build
+
+  # ---------------------------------------------------------------------
+  # 5. flutter analyze + testes do mobile.
+  # Só corre quando mobile/pubspec.yaml existir (mobile-flutter,
+  # fast-follow ADR-0008).
+  # ---------------------------------------------------------------------
+  mobile:
+    name: Mobile (analyze, test)
+    needs: detect
+    if: needs.detect.outputs.mobile == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2.23.0
+        with:
+          channel: stable
+          flutter-version: "3.32.0"
+          cache: true
+
+      - name: Install dependencies
+        working-directory: mobile
+        run: flutter pub get
+
+      - name: flutter analyze
+        working-directory: mobile
+        run: flutter analyze --fatal-infos
+
+      - name: flutter test
+        working-directory: mobile
+        run: flutter test
+
+  # ---------------------------------------------------------------------
+  # 6. Varrimento de segredos e de dependências vulneráveis.
+  # Corre sempre, independentemente de quais árvores já existem.
+  # ---------------------------------------------------------------------
+  security:
+    name: Secret scan + dependency vulnerabilities
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Scan for committed secrets (gitleaks)
+        uses: gitleaks/gitleaks-action@v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+
+      - name: Scan dependencies for known vulnerabilities (Trivy)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+          ignore-unfixed: true

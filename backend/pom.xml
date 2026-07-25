@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!--
+    ServiMatch backend — Spring Boot + Spring Modulith modular monolith.
+
+    Baseline fechada pelo ADR-0003 (docs/adr/0003-versao-stack-backend.md):
+    Java 21 LTS + Spring Boot 3.5.x + Spring Modulith 1.4.x. Não alterar sem
+    um ADR substituto.
+
+    Ownership: este ficheiro é propriedade exclusiva do agente
+    `backend-platform` (CLAUDE.md, secção 3). Outros agentes pedem
+    dependências novas em vez de as adicionarem diretamente.
+  -->
+
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.5.16</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>pt.servimatch</groupId>
+  <artifactId>servimatch-backend</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <packaging>jar</packaging>
+
+  <name>ServiMatch Backend</name>
+  <description>
+    Marketplace B2C de serviços locais — modular monolith (Spring Modulith)
+    sobre Spring Boot 3.5.x / Java 21. Ver docs/ARQUITETURA.md e docs/adr/.
+  </description>
+
+  <properties>
+    <java.version>21</java.version>
+    <maven.compiler.release>21</maven.compiler.release>
+
+    <!-- ADR-0003: baseline fechada. Spring Modulith 1.4.x alinhado com Boot 3.5.x. -->
+    <spring-modulith.version>1.4.12</spring-modulith.version>
+
+    <!-- Bucket4j (rate limiting, ADR-0006). Artefactos "_jdk17" são a linha
+         ativamente publicada, compatível com Java 17+ (usamos Java 21). -->
+    <bucket4j.version>8.19.0</bucket4j.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.springframework.modulith</groupId>
+        <artifactId>spring-modulith-bom</artifactId>
+        <version>${spring-modulith.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+
+    <!-- ==================== Web / API ==================== -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+
+    <!-- ==================== Segurança — OAuth2 Resource Server (ADR-0002/0009) ==================== -->
+    <!-- Apenas validação de JWT contra o JWKS do Keycloak. Sem emissão de
+         tokens, sem hashing de passwords: isso é do Keycloak. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+    </dependency>
+
+    <!-- ==================== Spring Modulith (ADR-0001) ==================== -->
+    <!-- Registo de fronteiras + Event Publication Registry (entrega
+         at-least-once, tabela de publicações e reentrega). Backend JDBC
+         (não JPA): o registo de eventos é infraestrutura transversal e não
+         deve obrigar a stack ORM que os módulos de domínio ainda vão
+         escolher. -->
+    <dependency>
+      <groupId>org.springframework.modulith</groupId>
+      <artifactId>spring-modulith-starter-jdbc</artifactId>
+    </dependency>
+    <!-- Observabilidade das fronteiras/eventos de módulo (Micrometer/OTel). -->
+    <dependency>
+      <groupId>org.springframework.modulith</groupId>
+      <artifactId>spring-modulith-observability</artifactId>
+    </dependency>
+
+    <!-- ==================== Base de dados / migrações ==================== -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-jdbc</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-database-postgresql</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+
+    <!-- ==================== Redis (ADR-0006, condicional multi-instância) ==================== -->
+    <!-- Sempre no classpath; só ativado por configuração
+         (servimatch.rate-limit.backend=redis / perfil multi-instância).
+         Single-instance usa buckets em memória — ver
+         pt.servimatch.platform.ratelimit. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-redis</artifactId>
+    </dependency>
+
+    <!-- ==================== Rate limiting (Bucket4j) ==================== -->
+    <dependency>
+      <groupId>com.bucket4j</groupId>
+      <artifactId>bucket4j_jdk17-core</artifactId>
+      <version>${bucket4j.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.bucket4j</groupId>
+      <artifactId>bucket4j_jdk17-lettuce</artifactId>
+      <version>${bucket4j.version}</version>
+    </dependency>
+
+    <!-- Cache local (idempotência em memória em single-instância; ADR-0006). -->
+    <dependency>
+      <groupId>com.github.ben-manes.caffeine</groupId>
+      <artifactId>caffeine</artifactId>
+    </dependency>
+
+    <!-- ==================== Observabilidade ==================== -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-registry-prometheus</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-tracing-bridge-otel</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.opentelemetry</groupId>
+      <artifactId>opentelemetry-exporter-otlp</artifactId>
+    </dependency>
+
+    <!-- ==================== Testes ==================== -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.security</groupId>
+      <artifactId>spring-security-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.modulith</groupId>
+      <artifactId>spring-modulith-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+
+</project>
