@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="drawio" version="30.2.4">
+  <diagram name="Module-Anatomy">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1300" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" /><mxCell id="1" parent="0" />
+        <mxCell id="t1" value="Arquitetura de Baixo Nível — Anatomia de um Módulo (Spring Modulith)" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=18;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="250" y="20" width="800" height="30" as="geometry" /></mxCell>
+
+        <mxCell id="req" value="Adaptadores externos (entrada)" style="swimlane;startSize=26;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="80" width="360" height="700" as="geometry" /></mxCell>
+        <mxCell id="ctrl" value="controller&#xa;@RestController&#xa;(REST /v1, valida DTOs, mapeia erros RFC 9457)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="req">
+          <mxGeometry x="30" y="60" width="300" height="90" as="geometry" /></mxCell>
+        <mxCell id="wsl" value="ws / stomp listener&#xa;(chat em tempo real)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="req">
+          <mxGeometry x="30" y="180" width="300" height="70" as="geometry" /></mxCell>
+        <mxCell id="evl" value="@ApplicationModuleListener&#xa;(consome eventos de outros módulos, idempotente)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="req">
+          <mxGeometry x="30" y="290" width="300" height="90" as="geometry" /></mxCell>
+        <mxCell id="whl" value="webhook handler&#xa;(assinatura + idempotência)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="req">
+          <mxGeometry x="30" y="420" width="300" height="70" as="geometry" /></mxCell>
+        <mxCell id="mapdto" value="dto + mapper (MapStruct)&#xa;validator (Bean Validation)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="req">
+          <mxGeometry x="30" y="530" width="300" height="70" as="geometry" /></mxCell>
+
+        <mxCell id="dom" value="Núcleo de domínio (package-private)" style="swimlane;startSize=26;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="490" y="80" width="360" height="700" as="geometry" /></mxCell>
+        <mxCell id="svc" value="service&#xa;regras de negócio · guardas de&#xa;transição · autorização por ownership&#xa;· gating de subscrição" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" vertex="1" parent="dom">
+          <mxGeometry x="30" y="60" width="300" height="110" as="geometry" /></mxCell>
+        <mxCell id="ent" value="entity (agregado)&#xa;máquina de estados explícita&#xa;enums como varchar + check" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" vertex="1" parent="dom">
+          <mxGeometry x="30" y="200" width="300" height="100" as="geometry" /></mxCell>
+        <mxCell id="repo" value="repository (Spring Data JPA)&#xa;queries PostGIS / FTS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;" vertex="1" parent="dom">
+          <mxGeometry x="30" y="330" width="300" height="80" as="geometry" /></mxCell>
+        <mxCell id="events" value="events&#xa;publica eventos de domínio&#xa;(mesma transação · commit → entrega)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="dom">
+          <mxGeometry x="30" y="440" width="300" height="90" as="geometry" /></mxCell>
+        <mxCell id="api" value="API pública mínima&#xa;(interfaces + DTOs partilhados)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="dom">
+          <mxGeometry x="30" y="560" width="300" height="70" as="geometry" /></mxCell>
+
+        <mxCell id="infra" value="Infra / adaptadores de saída" style="swimlane;startSize=26;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="900" y="80" width="320" height="700" as="geometry" /></mxCell>
+        <mxCell id="pg" value="PostgreSQL + PostGIS" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="infra">
+          <mxGeometry x="90" y="60" width="150" height="80" as="geometry" /></mxCell>
+        <mxCell id="reg" value="Event Publication&#xa;Registry (Modulith)" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="infra">
+          <mxGeometry x="90" y="180" width="150" height="80" as="geometry" /></mxCell>
+        <mxCell id="ports" value="ports &amp; adapters&#xa;PaymentGateway · Geocoder&#xa;ObjectStorage · Push/Mail" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;" vertex="1" parent="infra">
+          <mxGeometry x="35" y="300" width="250" height="100" as="geometry" /></mxCell>
+        <mxCell id="cross" value="cross-cutting&#xa;Resource Server · Bucket4j&#xa;Resilience4j · Micrometer/OTel" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="infra">
+          <mxGeometry x="35" y="440" width="250" height="100" as="geometry" /></mxCell>
+
+        <mxCell id="e_ctrl_svc" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="ctrl" target="svc"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_ws_svc" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="wsl" target="svc"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_ev_svc" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="evl" target="svc"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_wh_svc" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="whl" target="svc"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_svc_ent" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="svc" target="ent"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_ent_repo" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="ent" target="repo"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_svc_ev" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="svc" target="events"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_repo_pg" value="JPA" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="repo" target="pg"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_ev_reg" value="regista" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="events" target="reg"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_svc_ports" value="usa" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="svc" target="ports"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram name="Module-Dependencies">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="950" math="0" shadow="0">
+      <root>
+        <mxCell id="0" /><mxCell id="1" parent="0" />
+        <mxCell id="t2" value="Arquitetura de Baixo Nível — Mapa de Módulos e Eventos de Domínio" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=18;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="350" y="15" width="800" height="30" as="geometry" /></mxCell>
+        <mxCell id="leg" value="→ dependência (API pública)&#xa;⇢ evento de domínio (assíncrono)" style="text;html=1;align=left;fillColor=#f5f5f5;strokeColor=#999999;rounded=1;spacing=6;" vertex="1" parent="1">
+          <mxGeometry x="1230" y="60" width="230" height="50" as="geometry" /></mxCell>
+
+        <!-- Foundation -->
+        <mxCell id="m_common" value="common" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1"><mxGeometry x="80" y="440" width="120" height="50" as="geometry" /></mxCell>
+        <mxCell id="m_auth" value="auth (adapter)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1"><mxGeometry x="80" y="120" width="120" height="50" as="geometry" /></mxCell>
+        <mxCell id="m_users" value="users" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="300" y="280" width="120" height="50" as="geometry" /></mxCell>
+        <mxCell id="m_cust" value="customers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="520" y="180" width="120" height="50" as="geometry" /></mxCell>
+        <mxCell id="m_cat" value="categories" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="300" y="440" width="120" height="50" as="geometry" /></mxCell>
+        <mxCell id="m_prov" value="providers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="520" y="440" width="120" height="50" as="geometry" /></mxCell>
+        <mxCell id="m_req" value="requests" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1"><mxGeometry x="760" y="180" width="120" height="50" as="geometry" /></mxCell>
+        <mxCell id="m_prop" value="proposals" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1"><mxGeometry x="980" y="300" width="120" height="50" as="geometry" /></mxCell>
+        <mxCell id="m_sub" value="subscriptions" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1"><mxGeometry x="760" y="560" width="120" height="50" as="geometry" /></mxCell>
+        <mxCell id="m_pay" value="payments" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1"><mxGeometry x="760" y="680" width="120" height="50" as="geometry" /></mxCell>
+        <mxCell id="m_chat" value="chat" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="980" y="120" width="120" height="50" as="geometry" /></mxCell>
+        <mxCell id="m_sched" value="schedule" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="1200" y="300" width="120" height="50" as="geometry" /></mxCell>
+        <mxCell id="m_rev" value="reviews" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="1200" y="440" width="120" height="50" as="geometry" /></mxCell>
+        <mxCell id="m_notif" value="notifications&#xa;(subscreve eventos)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1"><mxGeometry x="1200" y="680" width="150" height="60" as="geometry" /></mxCell>
+        <mxCell id="m_admin" value="admin&#xa;(leitura transversal)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1"><mxGeometry x="300" y="680" width="150" height="60" as="geometry" /></mxCell>
+
+        <!-- dependency edges -->
+        <mxCell id="d1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=open;" edge="1" parent="1" source="m_auth" target="m_users"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=open;" edge="1" parent="1" source="m_users" target="m_common"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=open;" edge="1" parent="1" source="m_cust" target="m_users"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=open;" edge="1" parent="1" source="m_cat" target="m_common"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=open;" edge="1" parent="1" source="m_prov" target="m_users"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=open;" edge="1" parent="1" source="m_prov" target="m_cat"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=open;" edge="1" parent="1" source="m_req" target="m_cust"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=open;" edge="1" parent="1" source="m_req" target="m_cat"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=open;" edge="1" parent="1" source="m_prop" target="m_req"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=open;" edge="1" parent="1" source="m_prop" target="m_prov"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d11" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=open;" edge="1" parent="1" source="m_sub" target="m_prov"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d12" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=open;" edge="1" parent="1" source="m_pay" target="m_sub"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d13" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=open;" edge="1" parent="1" source="m_chat" target="m_req"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d14" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=open;" edge="1" parent="1" source="m_sched" target="m_prop"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d15" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=open;" edge="1" parent="1" source="m_rev" target="m_sched"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- event edges -->
+        <mxCell id="ev1" value="⇢ RequestPublished" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#b85450;endArrow=openThin;" edge="1" parent="1" source="m_req" target="m_notif"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ev2" value="⇢ PaymentSucceeded" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#b85450;endArrow=openThin;" edge="1" parent="1" source="m_pay" target="m_sub"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ev3" value="⇢ SubscriptionActivated" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#b85450;endArrow=openThin;" edge="1" parent="1" source="m_sub" target="m_prov"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ev4" value="⇢ BookingCompleted" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#b85450;endArrow=openThin;" edge="1" parent="1" source="m_sched" target="m_rev"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ev5" value="⇢ ProposalAccepted" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#b85450;endArrow=openThin;" edge="1" parent="1" source="m_prop" target="m_sched"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

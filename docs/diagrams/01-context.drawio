@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="drawio" version="30.2.4">
+  <diagram name="Context">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="ServiMatch — Diagrama de Contexto (C4 Nível 1)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=20;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="380" y="20" width="640" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Actors -->
+        <mxCell id="customer" value="Cliente&#xa;(procura serviços)" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="80" y="180" width="50" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="provider" value="Prestador&#xa;(oferece serviços)" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="80" y="420" width="50" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="admin" value="Administrador&#xa;(gestão/moderação)" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="80" y="660" width="50" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- Client apps -->
+        <mxCell id="web" value="SPA Web&#xa;(React + BFF)&#xa;&#xa;Cookie HttpOnly / PKCE" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="280" y="200" width="200" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="mobile" value="App Flutter&#xa;(iOS + Android)&#xa;&#xa;RFC 8252 + Keychain/Keystore" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="280" y="430" width="200" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- Central system -->
+        <mxCell id="system" value="&lt;b&gt;ServiMatch&lt;/b&gt;&#xa;Backend (Spring Boot + Modulith)&#xa;OAuth2 Resource Server&#xa;&#xa;Marketplace B2C de serviços locais.&#xa;Pedidos, matching, propostas, chat,&#xa;avaliações e subscrições." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="620" y="300" width="280" height="160" as="geometry" />
+        </mxCell>
+
+        <!-- External systems -->
+        <mxCell id="keycloak" value="Keycloak (IdP)&#xa;OAuth2 / OIDC&#xa;Identidade, MFA, JWKS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="620" y="120" width="220" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="payment" value="Gateway de Pagamentos&#xa;Stripe / Eupago / IfthenPay&#xa;(MB WAY, Multibanco)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="180" width="220" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="geocoding" value="Nominatim / OSM&#xa;Geocoding (self-hosted)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="300" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="fcm" value="FCM / APNs&#xa;Push (iOS/Android/Web)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="410" width="220" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="smtp" value="SMTP (Spring Mail)&#xa;Email" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="520" width="220" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="store" value="Object Store&#xa;S3 / R2 / MinIO&#xa;(fotografias, anexos)" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="670" y="620" width="180" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- Edges: actors to apps -->
+        <mxCell id="e1" value="usa" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.4;entryDx=0;entryDy=0;" edge="1" parent="1" source="customer" target="web">
+          <mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" value="usa" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="customer" target="mobile">
+          <mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" value="usa" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.6;entryDx=0;entryDy=0;" edge="1" parent="1" source="provider" target="mobile">
+          <mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" value="usa" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.3;exitDx=0;exitDy=0;entryX=0;entryY=0.85;entryDx=0;entryDy=0;" edge="1" parent="1" source="provider" target="web">
+          <mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" value="gere via web" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0.15;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="admin" target="web">
+          <mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- apps to system -->
+        <mxCell id="e6" value="HTTPS / REST&#xa;Bearer JWT" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="web" target="system">
+          <mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e7" value="HTTPS / REST&#xa;Bearer JWT" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="mobile" target="system">
+          <mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- apps to keycloak -->
+        <mxCell id="e8" value="OIDC + PKCE" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;" edge="1" parent="1" source="web" target="keycloak">
+          <mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e9" value="OIDC + PKCE&#xa;(system browser)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;" edge="1" parent="1" source="mobile" target="keycloak">
+          <mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- system to keycloak -->
+        <mxCell id="e10" value="valida JWT (JWKS)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="system" target="keycloak">
+          <mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- system to externals -->
+        <mxCell id="e11" value="subscrições + webhooks" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.15;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="system" target="payment">
+          <mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e12" value="geocoding (async)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.4;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="system" target="geocoding">
+          <mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e13" value="push" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.6;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="system" target="fcm">
+          <mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e14" value="email" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.85;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="system" target="smtp">
+          <mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e15" value="URLs assinadas" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="system" target="store">
+          <mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

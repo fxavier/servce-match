@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="drawio" version="30.2.4">
+  <diagram name="Dataflow">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" /><mxCell id="1" parent="0" />
+        <mxCell id="t" value="ServiMatch — Diagrama de Fluxo de Dados (publicação de pedido → matching → notificação)" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=17;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="250" y="15" width="900" height="30" as="geometry" /></mxCell>
+
+        <!-- External entities -->
+        <mxCell id="cust" value="Cliente" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="80" y="120" width="120" height="60" as="geometry" /></mxCell>
+        <mxCell id="prov" value="Prestador" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="80" y="800" width="120" height="60" as="geometry" /></mxCell>
+        <mxCell id="geo" value="Nominatim&#xa;(geocoding)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1320" y="300" width="120" height="60" as="geometry" /></mxCell>
+        <mxCell id="fcm" value="FCM / Email" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1320" y="640" width="120" height="60" as="geometry" /></mxCell>
+
+        <!-- Processes (circles) -->
+        <mxCell id="p1" value="1.0&#xa;Criar / Publicar&#xa;pedido" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="330" y="110" width="130" height="80" as="geometry" /></mxCell>
+        <mxCell id="p2" value="2.0&#xa;Geocodificar&#xa;morada (async)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="700" y="290" width="130" height="80" as="geometry" /></mxCell>
+        <mxCell id="p3" value="3.0&#xa;Matching&#xa;(PostGIS + gating)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="700" y="470" width="130" height="80" as="geometry" /></mxCell>
+        <mxCell id="p4" value="4.0&#xa;Notificar&#xa;prestadores" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1050" y="640" width="130" height="80" as="geometry" /></mxCell>
+        <mxCell id="p5" value="5.0&#xa;Enviar / gerir&#xa;proposta" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="330" y="620" width="130" height="80" as="geometry" /></mxCell>
+
+        <!-- Data stores (open rectangles) -->
+        <mxCell id="ds1" value="D1 | service_request&#xa;(status, location, tsvector)" style="shape=partialRectangle;top=0;right=0;bottom=1;left=0;fillColor=#fff2cc;strokeColor=#d6b656;whiteSpace=wrap;html=1;align=center;" vertex="1" parent="1"><mxGeometry x="320" y="300" width="230" height="50" as="geometry" /></mxCell>
+        <mxCell id="ds2" value="D2 | provider_profile / area&#xa;subscription (gating)" style="shape=partialRectangle;top=0;right=0;bottom=1;left=0;fillColor=#fff2cc;strokeColor=#d6b656;whiteSpace=wrap;html=1;align=center;" vertex="1" parent="1"><mxGeometry x="980" y="470" width="230" height="50" as="geometry" /></mxCell>
+        <mxCell id="ds3" value="D3 | proposal" style="shape=partialRectangle;top=0;right=0;bottom=1;left=0;fillColor=#fff2cc;strokeColor=#d6b656;whiteSpace=wrap;html=1;align=center;" vertex="1" parent="1"><mxGeometry x="60" y="620" width="200" height="50" as="geometry" /></mxCell>
+        <mxCell id="ds4" value="D4 | event registry&#xa;(RequestPublished)" style="shape=partialRectangle;top=0;right=0;bottom=1;left=0;fillColor=#fff2cc;strokeColor=#d6b656;whiteSpace=wrap;html=1;align=center;" vertex="1" parent="1"><mxGeometry x="700" y="120" width="230" height="50" as="geometry" /></mxCell>
+
+        <!-- Flows -->
+        <mxCell id="f1" value="dados do pedido + fotos" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="cust" target="p1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="f2" value="grava pedido (DRAFT/PUBLISHED)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="p1" target="ds1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="f3" value="publica RequestPublished" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="p1" target="ds4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="f4" value="dispara (async)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;" edge="1" parent="1" source="ds4" target="p2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="f5" value="morada" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="p2" target="geo"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="f6" value="coordenadas (cache)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="geo" target="p2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="f7" value="atualiza location" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="p2" target="ds1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="f8" value="pedido geocodificado" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="p2" target="p3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="f9" value="ST_DWithin / região + gating" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="p3" target="ds2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="f10" value="prestadores elegíveis (ranked)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="p3" target="p4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="f11" value="push / email" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="p4" target="fcm"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="f12" value="notificação de novo pedido" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="p4" target="prov"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="f13" value="proposta (preço, prazo)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="prov" target="p5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="f14" value="grava proposta (SENT)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="p5" target="ds3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="f15" value="pedido → IN_NEGOTIATION" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" edge="1" parent="1" source="p5" target="ds1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="f16" value="propostas recebidas" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;" edge="1" parent="1" source="ds3" target="cust"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="240" y="495" /><mxPoint x="240" y="150" /></Array></mxGeometry></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

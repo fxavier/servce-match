@@ -1,0 +1,53 @@
+# OS / editores
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+*.iml
+
+# Segredos
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.jks
+
+# Java / Maven
+target/
+build/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+.mvn/timing.properties
+
+# Node / Web
+node_modules/
+dist/
+.vite/
+coverage/
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Flutter / Dart
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+mobile/build/
+mobile/.pub-cache/
+mobile/ios/Pods/
+mobile/ios/.symlinks/
+mobile/android/.gradle/
+mobile/android/local.properties
+*.g.dart.bak
+
+# Infra / dados locais
+infra/**/data/
+*.log
+
+# Artefactos temporários deste checkout
+_to_delete/

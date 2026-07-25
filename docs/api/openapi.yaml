@@ -1,0 +1,1044 @@
+openapi: 3.1.0
+
+info:
+  title: ServiMatch API
+  version: "1.0.0"
+  description: |
+    Contrato REST do **ServiMatch** — marketplace de serviços locais.
+
+    Este documento é o **contrato único** partilhado pelos clientes **web (React)** e
+    **mobile (Flutter)** e implementado pelo backend (Spring Boot, OAuth2 Resource Server).
+
+    ## Convenções transversais
+    - **Autenticação:** OAuth2/OIDC via Keycloak. O backend valida o *access token* (JWT) contra
+      o JWKS do Keycloak. Ver `securitySchemes`.
+    - **Autorização:** por *role* (`CUSTOMER`, `PROVIDER`, `ADMIN`) **e** por *ownership* do recurso.
+      As *roles* exigidas estão indicadas na descrição de cada operação.
+    - **Erros:** formato **Problem Details** (RFC 9457), `application/problem+json`.
+    - **Paginação:** por **cursor** (`limit` + `cursor`); a resposta inclui `nextCursor`.
+    - **Idempotência:** operações `POST` sensíveis aceitam o header `Idempotency-Key`.
+    - **Dinheiro:** inteiros na menor unidade (`amountCents`) + `currency` (ISO 4217). Nunca vírgula flutuante.
+    - **Datas/horas:** ISO 8601 / RFC 3339, UTC.
+    - **Gating de subscrição:** operações de prestador (receber pedidos, propor, conversar) exigem
+      subscrição **ativa**; caso contrário devolvem `403` com `type` específico.
+  contact:
+    name: Equipa ServiMatch
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://api.servimatch.pt
+    description: Produção
+  - url: https://api.staging.servimatch.pt
+    description: Staging
+  - url: http://localhost:8080
+    description: Desenvolvimento local
+
+tags:
+  - name: Auth & App
+    description: Estado de versão da app (force-update) e registo de dispositivos para push.
+  - name: Categories
+    description: Catálogo de categorias.
+  - name: Requests
+    description: Pedidos de serviço do cliente.
+  - name: Proposals
+    description: Propostas dos prestadores.
+  - name: Providers & Search
+    description: Pesquisa de prestadores e caixa de entrada do prestador.
+  - name: Chat
+    description: Conversas e mensagens.
+  - name: Bookings & Reviews
+    description: Marcações e avaliações verificadas.
+  - name: Subscriptions & Payments
+    description: Subscrições dos prestadores e webhooks de pagamento.
+
+security:
+  - oidc: []
+
+paths:
+
+  /v1/app/version-status:
+    get:
+      tags: [Auth & App]
+      summary: Estado da versão da app (force-update)
+      description: |
+        Dado a plataforma e a versão do cliente, indica se deve/precisa de atualizar.
+        Usado por clientes móveis para *soft prompt* ou *hard gate*. **Público** (não requer token).
+      operationId: getAppVersionStatus
+      security: []
+      parameters:
+        - name: platform
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/Platform' }
+        - name: appVersion
+          in: query
+          required: true
+          description: Versão semântica do cliente (ex."1.4.2").
+          schema: { type: string, example: "1.4.2" }
+      responses:
+        '200':
+          description: Estado calculado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VersionStatus' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/device-tokens:
+    post:
+      tags: [Auth & App]
+      summary: Registar/atualizar token de push do dispositivo
+      description: Regista um token FCM para o utilizador autenticado (multi-dispositivo). Idempotente por `token`.
+      operationId: registerDeviceToken
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterDeviceToken' }
+      responses:
+        '204': { description: Registado/atualizado. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/device-tokens/{token}:
+    delete:
+      tags: [Auth & App]
+      summary: Remover token de push
+      description: Remove o token no logout ou quando deixa de ser válido.
+      operationId: deleteDeviceToken
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: Removido. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/categories:
+    get:
+      tags: [Categories]
+      summary: Listar categorias
+      description: Catálogo hierárquico de categorias/subcategorias. Público.
+      operationId: listCategories
+      security: []
+      parameters:
+        - name: parentId
+          in: query
+          required: false
+          description: Filtra pelas subcategorias de uma categoria.
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Lista de categorias.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Category' }
+
+  /v1/uploads:
+    post:
+      tags: [Uploads]
+      summary: Obter URL assinado para upload
+      description: |
+        Emite um **URL pré-assinado** para o cliente enviar o ficheiro **diretamente** para o
+        object storage, sem passar pelo backend. Devolve o `imageId` a usar depois em
+        `imageIds`/`attachmentIds` dos restantes recursos.
+
+        Fluxo: `POST /v1/uploads` → `PUT` do ficheiro para `uploadUrl` com os `headers`
+        devolvidos → referenciar o `imageId` no recurso final.
+
+        **Validação:** o `contentType` e o `contentLength` fazem parte da assinatura — enviar
+        valores diferentes dos declarados invalida o `PUT`. No momento em que o `imageId` é
+        associado a um recurso, o servidor **verifica o objeto por *magic bytes*** (nunca pela
+        extensão nem pelo `contentType` declarado) e rejeita o que não corresponder. Um
+        `imageId` nunca referenciado expira e é recolhido.
+      operationId: createUpload
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateUpload' }
+      responses:
+        '201':
+          description: URL de upload emitido.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadTarget' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413':
+          description: Ficheiro acima do limite permitido para este `purpose`.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetails' }
+        '415':
+          description: Tipo de conteúdo não suportado.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetails' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /v1/requests:
+    post:
+      tags: [Requests]
+      summary: Criar pedido (DRAFT)
+      description: Cria um pedido em estado `DRAFT`. **Role:** `CUSTOMER`.
+      operationId: createRequest
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateServiceRequest' }
+      responses:
+        '201':
+          description: Pedido criado.
+          headers:
+            Location:
+              description: URI do pedido criado.
+              schema: { type: string, format: uri }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceRequest' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /v1/requests/{requestId}:
+    get:
+      tags: [Requests]
+      summary: Detalhe do pedido
+      description: Devolve o pedido. **Autorização:** dono (`CUSTOMER`) ou `ADMIN`; prestadores elegíveis veem uma vista limitada.
+      operationId: getRequest
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Pedido.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/requests/{requestId}/publish:
+    post:
+      tags: [Requests]
+      summary: Publicar pedido
+      description: |
+        Transiciona `DRAFT → PUBLISHED` e dispara o *matching* assíncrono.
+        **Role:** `CUSTOMER` (dono). Requer campos obrigatórios preenchidos.
+      operationId: publishRequest
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200':
+          description: Pedido publicado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Transição de estado inválida (ex.já publicado).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetails' }
+
+  /v1/requests/{requestId}/proposals:
+    get:
+      tags: [Proposals]
+      summary: Listar propostas de um pedido
+      description: Propostas recebidas para o pedido. **Autorização:** dono (`CUSTOMER`) ou `ADMIN`.
+      operationId: listRequestProposals
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Página de propostas.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProposalPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Proposals]
+      summary: Enviar proposta
+      description: |
+        Um prestador envia uma proposta para o pedido. **Role:** `PROVIDER` com **subscrição ativa**.
+        Máximo uma proposta ativa por prestador (reenviar substitui a anterior).
+      operationId: createProposal
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateProposal' }
+      responses:
+        '201':
+          description: Proposta enviada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Proposal' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: |
+            Sem permissão. Inclui o caso de **subscrição inativa**
+            (`type: https://errors.servimatch.pt/subscription-required`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetails' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Pedido não aceita propostas no estado atual.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetails' }
+
+  /v1/proposals/{proposalId}/accept:
+    post:
+      tags: [Proposals]
+      summary: Aceitar proposta
+      description: |
+        O cliente aceita uma proposta: `Proposal → ACCEPTED` e `ServiceRequest → CONFIRMED`.
+        As restantes propostas passam a `SUPERSEDED`. **Role:** `CUSTOMER` (dono do pedido).
+      operationId: acceptProposal
+      parameters:
+        - name: proposalId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Proposta aceite.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Proposal' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Estado inválido (proposta expirada/rejeitada ou pedido já confirmado).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetails' }
+
+  /v1/providers/me/requests:
+    get:
+      tags: [Providers & Search]
+      summary: Caixa de entrada do prestador
+      description: |
+        Pedidos elegíveis para o prestador autenticado (por categoria, zona e estado).
+        **Role:** `PROVIDER` com **subscrição ativa**.
+      operationId: listProviderInbox
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/RequestStatus' }
+      responses:
+        '200':
+          description: Página de pedidos elegíveis.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceRequestPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: Subscrição inativa ou perfil não aprovado.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetails' }
+
+  /v1/search/providers:
+    get:
+      tags: [Providers & Search]
+      summary: Pesquisar prestadores
+      description: |
+        Pesquisa prestadores **visíveis** (subscrição ativa e aprovados), por categoria,
+        localização e texto. Público.
+      operationId: searchProviders
+      security: []
+      parameters:
+        - name: categoryId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: lat
+          in: query
+          description: Latitude do ponto de referência (WGS84).
+          schema: { type: number, format: double }
+        - name: lon
+          in: query
+          description: Longitude do ponto de referência (WGS84).
+          schema: { type: number, format: double }
+        - name: regionCode
+          in: query
+          description: Código de região administrativa (alternativa a lat/lon).
+          schema: { type: string }
+        - name: q
+          in: query
+          description: Texto livre (full-text search).
+          schema: { type: string }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Página de prestadores.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProviderSummaryPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/conversations/{conversationId}/messages:
+    get:
+      tags: [Chat]
+      summary: Listar mensagens
+      description: Mensagens de uma conversa. **Autorização:** participante da conversa.
+      operationId: listMessages
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Página de mensagens (ordem cronológica inversa).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessagePage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Chat]
+      summary: Enviar mensagem
+      description: |
+        Envia mensagem numa conversa. **Autorização:** participante. Um prestador
+        precisa de **subscrição ativa** para iniciar/participar em novas conversas.
+      operationId: sendMessage
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateMessage' }
+      responses:
+        '201':
+          description: Mensagem enviada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Message' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/bookings/{bookingId}/complete:
+    post:
+      tags: [Bookings & Reviews]
+      summary: Concluir marcação
+      description: |
+        Marca a `Booking` como `COMPLETED`, habilitando a avaliação. **Autorização:** participante.
+      operationId: completeBooking
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Marcação concluída.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Booking' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Estado inválido.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetails' }
+
+  /v1/reviews:
+    post:
+      tags: [Bookings & Reviews]
+      summary: Submeter avaliação
+      description: |
+        Avaliação **verificada**: só é permitida se existir uma `Booking` em `COMPLETED`
+        entre autor e alvo. **Autorização:** participante da marcação.
+      operationId: createReview
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateReview' }
+      responses:
+        '201':
+          description: Avaliação criada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Já avaliado ou marcação não concluída.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetails' }
+
+  /v1/subscription-plans:
+    get:
+      tags: [Subscriptions & Payments]
+      summary: Listar planos
+      description: Planos de subscrição ativos. Público.
+      operationId: listSubscriptionPlans
+      security: []
+      responses:
+        '200':
+          description: Lista de planos.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SubscriptionPlan' }
+
+  /v1/subscriptions:
+    post:
+      tags: [Subscriptions & Payments]
+      summary: Subscrever plano
+      description: |
+        Inicia a subscrição de um plano para o prestador autenticado. Devolve dados para
+        completar o pagamento (ex.`checkoutUrl` ou referência). **Role:** `PROVIDER`.
+        A subscrição só fica `ACTIVE` após confirmação do pagamento por **webhook**.
+      operationId: createSubscription
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSubscription' }
+      responses:
+        '201':
+          description: Subscrição iniciada (pendente de pagamento).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SubscriptionCheckout' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /v1/webhooks/payments/{gateway}:
+    post:
+      tags: [Subscriptions & Payments]
+      summary: Webhook de pagamento
+      description: |
+        Recebe eventos do gateway (Stripe/Eupago/IfthenPay). **Não** usa OAuth: é autenticado
+        pela **assinatura** do gateway (header próprio). Processamento **idempotente** por `raw_event_id`.
+      operationId: paymentWebhook
+      security: []
+      parameters:
+        - name: gateway
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [stripe, eupago, ifthenpay, paypal]
+      requestBody:
+        required: true
+        description: Payload cru do gateway (formato específico do fornecedor).
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '204': { description: Evento aceite (ou duplicado ignorado). }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401':
+          description: Assinatura inválida.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetails' }
+
+components:
+
+  securitySchemes:
+    oidc:
+      type: openIdConnect
+      description: |
+        OpenID Connect via Keycloak. O cliente obtém o token por **Authorization Code + PKCE**
+        (web: BFF/PKCE; mobile: RFC 8252). O backend valida o JWT contra o JWKS do realm.
+        Substituir a URL pelo *issuer* real do realm.
+      openIdConnectUrl: https://auth.servimatch.pt/realms/servimatch/.well-known/openid-configuration
+    oauth2:
+      type: oauth2
+      description: Esquema OAuth2 explícito (para ferramentas que não suportam openIdConnect).
+      flows:
+        authorizationCode:
+          authorizationUrl: https://auth.servimatch.pt/realms/servimatch/protocol/openid-connect/auth
+          tokenUrl: https://auth.servimatch.pt/realms/servimatch/protocol/openid-connect/token
+          refreshUrl: https://auth.servimatch.pt/realms/servimatch/protocol/openid-connect/token
+          scopes:
+            openid: OIDC
+            profile: Perfil
+            email: Email
+
+  parameters:
+    RequestId:
+      name: requestId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ConversationId:
+      name: conversationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Número máximo de itens por página.
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Cursor opaco devolvido em `nextCursor`.
+      schema: { type: string }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Chave para tornar o `POST` idempotente (repetições devolvem o mesmo resultado).
+      schema: { type: string, format: uuid }
+
+  responses:
+    BadRequest:
+      description: Pedido inválido.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
+    Unauthorized:
+      description: Não autenticado.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
+    Forbidden:
+      description: Sem permissão.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
+    NotFound:
+      description: Não encontrado.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
+    UnprocessableEntity:
+      description: Entidade não processável (validação de negócio).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetails' }
+
+  schemas:
+
+    ProblemDetails:
+      type: object
+      description: Erro no formato RFC 9457.
+      properties:
+        type: { type: string, format: uri, example: "https://errors.servimatch.pt/validation" }
+        title: { type: string, example: "Dados inválidos" }
+        status: { type: integer, example: 422 }
+        detail: { type: string, example: "O campo 'categoryId' é obrigatório." }
+        instance: { type: string, format: uri }
+        errors:
+          type: array
+          description: Erros de validação por campo (extensão).
+          items:
+            type: object
+            properties:
+              field: { type: string }
+              message: { type: string }
+      required: [title, status]
+
+    Platform:
+      type: string
+      enum: [IOS, ANDROID, WEB]
+
+    VersionStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [OK, UPDATE_RECOMMENDED, UPDATE_REQUIRED]
+        minSupportedVersion: { type: string, example: "1.2.0" }
+        latestVersion: { type: string, example: "1.5.0" }
+        storeUrl: { type: string, format: uri }
+        message: { type: string, description: Mensagem opcional a mostrar ao utilizador. }
+      required: [status]
+
+    RegisterDeviceToken:
+      type: object
+      properties:
+        token: { type: string }
+        platform: { $ref: '#/components/schemas/Platform' }
+        appVersion: { type: string, example: "1.4.2" }
+      required: [token, platform]
+
+    GeoPoint:
+      type: object
+      description: Ponto geográfico (WGS84).
+      properties:
+        lat: { type: number, format: double, minimum: -90, maximum: 90 }
+        lon: { type: number, format: double, minimum: -180, maximum: 180 }
+      required: [lat, lon]
+
+    Address:
+      type: object
+      properties:
+        line1: { type: string }
+        line2: { type: string }
+        postalCode: { type: string, example: "1000-001" }
+        city: { type: string }
+        regionCode: { type: string, description: Código de região administrativa (concelho/distrito). }
+        country: { type: string, example: "PT" }
+        location: { $ref: '#/components/schemas/GeoPoint' }
+
+    Category:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        parentId: { type: string, format: uuid, nullable: true }
+        slug: { type: string, example: "canalizacao" }
+        name: { type: string, example: "Canalização" }
+        active: { type: boolean }
+      required: [id, slug, name, active]
+
+    UrgencyLevel:
+      type: string
+      enum: [LOW, NORMAL, HIGH, URGENT]
+
+    RequestStatus:
+      type: string
+      enum: [DRAFT, PUBLISHED, IN_NEGOTIATION, CONFIRMED, IN_PROGRESS, COMPLETED, CANCELLED]
+
+    ProposalStatus:
+      type: string
+      enum: [SENT, ACCEPTED, REJECTED, CANCELLED, EXPIRED, SUPERSEDED]
+
+    SubscriptionStatus:
+      type: string
+      enum: [PENDING, ACTIVE, PAST_DUE, EXPIRED, CANCELLED]
+
+    Money:
+      type: object
+      properties:
+        amountCents: { type: integer, format: int64, minimum: 0, example: 4500 }
+        currency: { type: string, example: "EUR", minLength: 3, maxLength: 3 }
+      required: [amountCents, currency]
+
+    ImageRef:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        url: { type: string, format: uri, description: URL assinada com expiração. }
+        contentType: { type: string, example: "image/jpeg" }
+      required: [id, url]
+
+    UploadPurpose:
+      type: string
+      description: |
+        Finalidade do ficheiro. Determina os limites de tamanho, os tipos aceites e as regras
+        de autorização aplicadas no servidor.
+      enum:
+        - REQUEST_ATTACHMENT
+        - MESSAGE_ATTACHMENT
+        - PROVIDER_PORTFOLIO
+        - PROVIDER_DOCUMENT
+        - AVATAR
+
+    CreateUpload:
+      type: object
+      properties:
+        purpose: { $ref: '#/components/schemas/UploadPurpose' }
+        fileName:
+          type: string
+          maxLength: 255
+          description: |
+            Nome original, apenas informativo. O servidor gera a chave de armazenamento e
+            **não** usa este valor no caminho do objeto (evita *path traversal*).
+          example: "fuga-cozinha.jpg"
+        contentType:
+          type: string
+          description: Tipo declarado; passa a fazer parte da assinatura do URL.
+          enum: [image/jpeg, image/png, image/webp, application/pdf]
+        contentLength:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Tamanho exato em bytes; passa a fazer parte da assinatura do URL.
+          example: 1843200
+      required: [purpose, contentType, contentLength]
+
+    UploadTarget:
+      type: object
+      properties:
+        imageId:
+          type: string
+          format: uuid
+          description: Identificador a referenciar em `imageIds`/`attachmentIds` após o envio.
+        uploadUrl: { type: string, format: uri, description: URL pré-assinado, de utilização única. }
+        method: { type: string, enum: [PUT], default: PUT }
+        headers:
+          type: object
+          additionalProperties: { type: string }
+          description: |
+            Cabeçalhos obrigatórios no `PUT` (ex. `Content-Type`, `Content-Length`). Enviar
+            um conjunto diferente invalida a assinatura.
+        expiresAt: { type: string, format: date-time, description: Expiração do URL de upload. }
+        maxSizeBytes: { type: integer, format: int64, description: Limite aplicado a este `purpose`. }
+      required: [imageId, uploadUrl, method, headers, expiresAt]
+
+    CreateServiceRequest:
+      type: object
+      properties:
+        categoryId: { type: string, format: uuid }
+        title: { type: string, minLength: 3, maxLength: 140 }
+        description: { type: string, maxLength: 4000 }
+        address: { $ref: '#/components/schemas/Address' }
+        urgency: { $ref: '#/components/schemas/UrgencyLevel' }
+        availability: { type: string, description: Texto livre com disponibilidade do cliente. }
+        imageIds:
+          type: array
+          description: IDs de imagens previamente carregadas (upload por URL assinada).
+          items: { type: string, format: uuid }
+      required: [categoryId, title, address]
+
+    ServiceRequest:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        customerId: { type: string, format: uuid }
+        category: { $ref: '#/components/schemas/Category' }
+        title: { type: string }
+        description: { type: string }
+        address: { $ref: '#/components/schemas/Address' }
+        urgency: { $ref: '#/components/schemas/UrgencyLevel' }
+        availability: { type: string }
+        status: { $ref: '#/components/schemas/RequestStatus' }
+        images:
+          type: array
+          items: { $ref: '#/components/schemas/ImageRef' }
+        proposalCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+        publishedAt: { type: string, format: date-time, nullable: true }
+      required: [id, customerId, title, status, createdAt]
+
+    CreateProposal:
+      type: object
+      properties:
+        price: { $ref: '#/components/schemas/Money' }
+        description: { type: string, maxLength: 2000 }
+        leadTimeDays: { type: integer, minimum: 0 }
+        validUntil: { type: string, format: date-time }
+      required: [price, description]
+
+    Proposal:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        requestId: { type: string, format: uuid }
+        providerId: { type: string, format: uuid }
+        providerSummary: { $ref: '#/components/schemas/ProviderSummary' }
+        price: { $ref: '#/components/schemas/Money' }
+        description: { type: string }
+        leadTimeDays: { type: integer }
+        validUntil: { type: string, format: date-time, nullable: true }
+        status: { $ref: '#/components/schemas/ProposalStatus' }
+        createdAt: { type: string, format: date-time }
+      required: [id, requestId, providerId, price, status, createdAt]
+
+    ProviderSummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        displayName: { type: string }
+        headline: { type: string }
+        companyName: { type: string, nullable: true }
+        ratingAvg: { type: number, format: float, minimum: 0, maximum: 5 }
+        ratingCount: { type: integer }
+        verified: { type: boolean }
+        premiumBadge: { type: boolean }
+        avatarUrl: { type: string, format: uri, nullable: true }
+      required: [id, displayName, ratingAvg, ratingCount]
+
+    CreateMessage:
+      type: object
+      properties:
+        body: { type: string, maxLength: 4000 }
+        attachmentIds:
+          type: array
+          items: { type: string, format: uuid }
+      required: [body]
+
+    Message:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        conversationId: { type: string, format: uuid }
+        senderId: { type: string, format: uuid }
+        body: { type: string }
+        attachments:
+          type: array
+          items: { $ref: '#/components/schemas/ImageRef' }
+        sentAt: { type: string, format: date-time }
+        readAt: { type: string, format: date-time, nullable: true }
+      required: [id, conversationId, senderId, body, sentAt]
+
+    Booking:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        proposalId: { type: string, format: uuid }
+        scheduledStart: { type: string, format: date-time, nullable: true }
+        scheduledEnd: { type: string, format: date-time, nullable: true }
+        status:
+          type: string
+          enum: [CONFIRMED, IN_PROGRESS, COMPLETED, CANCELLED, NO_SHOW]
+        completedAt: { type: string, format: date-time, nullable: true }
+      required: [id, proposalId, status]
+
+    CreateReview:
+      type: object
+      properties:
+        bookingId: { type: string, format: uuid }
+        targetId: { type: string, format: uuid, description: Utilizador avaliado. }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string, maxLength: 2000 }
+      required: [bookingId, targetId, rating]
+
+    Review:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        bookingId: { type: string, format: uuid }
+        authorId: { type: string, format: uuid }
+        targetId: { type: string, format: uuid }
+        rating: { type: integer }
+        comment: { type: string }
+        createdAt: { type: string, format: date-time }
+      required: [id, bookingId, authorId, targetId, rating, createdAt]
+
+    SubscriptionPlan:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string, example: "professional" }
+        name: { type: string, example: "Professional" }
+        price: { $ref: '#/components/schemas/Money' }
+        interval: { type: string, enum: [MONTHLY] }
+        maxCategories: { type: integer, nullable: true, description: "null = ilimitado" }
+        maxAreas: { type: integer, nullable: true, description: "null = ilimitado" }
+        rankingBoost: { type: integer, default: 0 }
+        hasBadge: { type: boolean }
+        active: { type: boolean }
+      required: [id, code, name, price, interval, active]
+
+    CreateSubscription:
+      type: object
+      properties:
+        planId: { type: string, format: uuid }
+        gateway:
+          type: string
+          enum: [stripe, eupago, ifthenpay, paypal]
+        returnUrl: { type: string, format: uri, description: URL de retorno pós-checkout (web/deep link mobile). }
+      required: [planId, gateway]
+
+    SubscriptionCheckout:
+      type: object
+      description: Dados para o cliente completar o pagamento.
+      properties:
+        subscriptionId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/SubscriptionStatus' }
+        checkoutUrl: { type: string, format: uri, nullable: true, description: Redirecionar (ex.Stripe). }
+        paymentReference:
+          type: object
+          nullable: true
+          description: Referência para métodos como Multibanco.
+          properties:
+            entity: { type: string }
+            reference: { type: string }
+            amount: { $ref: '#/components/schemas/Money' }
+      required: [subscriptionId, status]
+
+    Subscription:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        providerId: { type: string, format: uuid }
+        planId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/SubscriptionStatus' }
+        currentPeriodStart: { type: string, format: date-time }
+        currentPeriodEnd: { type: string, format: date-time }
+        cancelAtPeriodEnd: { type: boolean }
+      required: [id, providerId, planId, status]
+
+    # --- Envelopes de paginação por cursor ---
+    PageMeta:
+      type: object
+      properties:
+        nextCursor: { type: string, nullable: true, description: "null quando não há mais páginas." }
+      required: [nextCursor]
+
+    ProposalPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Proposal' }
+        page: { $ref: '#/components/schemas/PageMeta' }
+      required: [items, page]
+
+    ServiceRequestPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ServiceRequest' }
+        page: { $ref: '#/components/schemas/PageMeta' }
+      required: [items, page]
+
+    ProviderSummaryPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ProviderSummary' }
+        page: { $ref: '#/components/schemas/PageMeta' }
+      required: [items, page]
+
+    MessagePage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Message' }
+        page: { $ref: '#/components/schemas/PageMeta' }
+      required: [items, page]

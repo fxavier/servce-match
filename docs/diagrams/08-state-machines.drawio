@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="drawio" version="30.2.4">
+  <diagram name="FSM-ServiceRequest">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1300" pageHeight="700" math="0" shadow="0">
+      <root>
+        <mxCell id="0" /><mxCell id="1" parent="0" />
+        <mxCell id="t" value="Máquina de Estados — ServiceRequest" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=17;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="350" y="15" width="600" height="30" as="geometry" /></mxCell>
+
+        <mxCell id="init" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#000000;" vertex="1" parent="1"><mxGeometry x="60" y="200" width="30" height="30" as="geometry" /></mxCell>
+        <mxCell id="draft" value="DRAFT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="160" y="190" width="130" height="50" as="geometry" /></mxCell>
+        <mxCell id="pub" value="PUBLISHED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="380" y="190" width="130" height="50" as="geometry" /></mxCell>
+        <mxCell id="neg" value="IN_NEGOTIATION" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="600" y="190" width="150" height="50" as="geometry" /></mxCell>
+        <mxCell id="conf" value="CONFIRMED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="850" y="190" width="130" height="50" as="geometry" /></mxCell>
+        <mxCell id="prog" value="IN_PROGRESS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="850" y="360" width="130" height="50" as="geometry" /></mxCell>
+        <mxCell id="comp" value="COMPLETED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="850" y="520" width="130" height="50" as="geometry" /></mxCell>
+        <mxCell id="canc" value="CANCELLED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="380" y="420" width="130" height="50" as="geometry" /></mxCell>
+        <mxCell id="fin" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;" vertex="1" parent="1"><mxGeometry x="1080" y="530" width="30" height="30" as="geometry" /></mxCell>
+        <mxCell id="fin2" value="" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;" vertex="1" parent="1"><mxGeometry x="600" y="430" width="30" height="30" as="geometry" /></mxCell>
+
+        <mxCell id="x0" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="init" target="draft"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x1" value="publicar&#xa;[campos obrigatórios]" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="draft" target="pub"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x2" value="1ª proposta SENT" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="pub" target="neg"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x3" value="aceitar proposta" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="neg" target="conf"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x4" value="marcação ativada" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="conf" target="prog"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x5" value="conclusão confirmada" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="prog" target="comp"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x6" value="habilita avaliação" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="comp" target="fin"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x7" value="cancelar [sem serviço]" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="pub" target="canc"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x8" value="cancelar" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="neg" target="canc"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x9" value="cancelar" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="draft" target="canc"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x10" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="canc" target="fin2"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram name="FSM-Proposal">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="700" math="0" shadow="0">
+      <root>
+        <mxCell id="0" /><mxCell id="1" parent="0" />
+        <mxCell id="t" value="Máquina de Estados — Proposal" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=17;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="300" y="15" width="500" height="30" as="geometry" /></mxCell>
+
+        <mxCell id="init" value="" style="ellipse;fillColor=#000000;strokeColor=#000000;" vertex="1" parent="1"><mxGeometry x="60" y="290" width="30" height="30" as="geometry" /></mxCell>
+        <mxCell id="sent" value="SENT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="170" y="280" width="130" height="50" as="geometry" /></mxCell>
+        <mxCell id="acc" value="ACCEPTED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="500" y="120" width="130" height="50" as="geometry" /></mxCell>
+        <mxCell id="rej" value="REJECTED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="500" y="230" width="130" height="50" as="geometry" /></mxCell>
+        <mxCell id="cxl" value="CANCELLED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="500" y="330" width="130" height="50" as="geometry" /></mxCell>
+        <mxCell id="exp" value="EXPIRED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="500" y="430" width="130" height="50" as="geometry" /></mxCell>
+        <mxCell id="sup" value="SUPERSEDED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="500" y="530" width="130" height="50" as="geometry" /></mxCell>
+        <mxCell id="fin" value="" style="ellipse;fillColor=#ffffff;strokeColor=#000000;" vertex="1" parent="1"><mxGeometry x="820" y="335" width="30" height="30" as="geometry" /></mxCell>
+
+        <mxCell id="x0" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="init" target="sent"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x1" value="cliente aceita" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="sent" target="acc"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x2" value="cliente rejeita" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="sent" target="rej"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x3" value="prestador cancela" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="sent" target="cxl"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x4" value="validade expira" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="sent" target="exp"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x5" value="pedido CONFIRMED&#xa;por outra proposta" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="sent" target="sup"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="xf1" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="acc" target="fin"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="xf2" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="rej" target="fin"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="xf3" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="cxl" target="fin"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="xf4" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="exp" target="fin"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="xf5" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="sup" target="fin"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram name="FSM-Subscription">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1300" pageHeight="700" math="0" shadow="0">
+      <root>
+        <mxCell id="0" /><mxCell id="1" parent="0" />
+        <mxCell id="t" value="Máquina de Estados — Subscription (visibility_state derivado)" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=17;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="300" y="15" width="700" height="30" as="geometry" /></mxCell>
+
+        <mxCell id="init" value="" style="ellipse;fillColor=#000000;strokeColor=#000000;" vertex="1" parent="1"><mxGeometry x="60" y="215" width="30" height="30" as="geometry" /></mxCell>
+        <mxCell id="pend" value="PENDING&#xa;(HIDDEN)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="160" y="200" width="140" height="60" as="geometry" /></mxCell>
+        <mxCell id="active" value="ACTIVE&#xa;(VISIBLE)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="420" y="200" width="140" height="60" as="geometry" /></mxCell>
+        <mxCell id="past" value="PAST_DUE&#xa;(grace → VISIBLE)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="680" y="200" width="160" height="60" as="geometry" /></mxCell>
+        <mxCell id="exp" value="EXPIRED&#xa;(HIDDEN)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="420" y="420" width="140" height="60" as="geometry" /></mxCell>
+        <mxCell id="canc" value="CANCELLED&#xa;(HIDDEN)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="700" y="420" width="140" height="60" as="geometry" /></mxCell>
+        <mxCell id="fin" value="" style="ellipse;fillColor=#ffffff;strokeColor=#000000;" vertex="1" parent="1"><mxGeometry x="990" y="435" width="30" height="30" as="geometry" /></mxCell>
+
+        <mxCell id="x0" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="init" target="pend"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x1" value="webhook: pagamento ok" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="pend" target="active"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x2" value="pagamento falha" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="active" target="past"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x3" value="pagamento ok (retry)" style="endArrow=block;html=1;rounded=1;dashed=1;" edge="1" parent="1" source="past" target="active"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="760" y="290" /><mxPoint x="490" y="290" /></Array></mxGeometry></mxCell>
+        <mxCell id="x4" value="fim do período sem renovar" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="active" target="exp"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x5" value="retries falham" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="past" target="canc"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x6" value="cancelar (cancel_at_period_end)&#xa;→ fim do período" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="active" target="canc"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x7" value="job de expiração" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="exp" target="fin"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x8" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="canc" target="fin"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram name="FSM-Booking">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="600" math="0" shadow="0">
+      <root>
+        <mxCell id="0" /><mxCell id="1" parent="0" />
+        <mxCell id="t" value="Máquina de Estados — Booking" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=17;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="300" y="15" width="500" height="30" as="geometry" /></mxCell>
+
+        <mxCell id="init" value="" style="ellipse;fillColor=#000000;strokeColor=#000000;" vertex="1" parent="1"><mxGeometry x="60" y="215" width="30" height="30" as="geometry" /></mxCell>
+        <mxCell id="conf" value="CONFIRMED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="160" y="200" width="140" height="50" as="geometry" /></mxCell>
+        <mxCell id="prog" value="IN_PROGRESS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="400" y="200" width="140" height="50" as="geometry" /></mxCell>
+        <mxCell id="comp" value="COMPLETED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="640" y="200" width="140" height="50" as="geometry" /></mxCell>
+        <mxCell id="canc" value="CANCELLED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="400" y="360" width="140" height="50" as="geometry" /></mxCell>
+        <mxCell id="nos" value="NO_SHOW" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="640" y="360" width="140" height="50" as="geometry" /></mxCell>
+        <mxCell id="fin" value="" style="ellipse;fillColor=#ffffff;strokeColor=#000000;" vertex="1" parent="1"><mxGeometry x="860" y="210" width="30" height="30" as="geometry" /></mxCell>
+
+        <mxCell id="x0" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="init" target="conf"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x1" value="iniciar" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="conf" target="prog"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x2" value="concluir&#xa;(BookingCompleted → review)" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="prog" target="comp"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x3" value="cancelar" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="conf" target="canc"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x4" value="cliente/prestador não comparece" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="prog" target="nos"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x5" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="comp" target="fin"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="x6" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="canc" target="fin"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="875" y="385" /></Array></mxGeometry></mxCell>
+        <mxCell id="x7" style="endArrow=block;html=1;rounded=1;" edge="1" parent="1" source="nos" target="fin"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

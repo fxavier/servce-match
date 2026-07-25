@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="drawio" version="30.2.4">
+  <diagram name="Seq-Auth-SPA">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" /><mxCell id="1" parent="0" />
+        <mxCell id="t" value="Sequência — Autenticação Web (Authorization Code + PKCE via BFF)" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=16;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="200" y="15" width="820" height="30" as="geometry" /></mxCell>
+
+        <mxCell id="hA" value="SPA (browser)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="60" y="60" width="160" height="40" as="geometry" /></mxCell>
+        <mxCell id="hB" value="BFF (web)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="340" y="60" width="160" height="40" as="geometry" /></mxCell>
+        <mxCell id="hC" value="Keycloak (IdP)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="620" y="60" width="160" height="40" as="geometry" /></mxCell>
+        <mxCell id="hD" value="Backend (Resource Server)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="900" y="60" width="180" height="40" as="geometry" /></mxCell>
+
+        <mxCell id="lA" style="endArrow=none;dashed=1;strokeColor=#999999;html=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="140" y="100" as="sourcePoint" /><mxPoint x="140" y="820" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lB" style="endArrow=none;dashed=1;strokeColor=#999999;html=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="420" y="100" as="sourcePoint" /><mxPoint x="420" y="820" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lC" style="endArrow=none;dashed=1;strokeColor=#999999;html=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="700" y="100" as="sourcePoint" /><mxPoint x="700" y="820" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lD" style="endArrow=none;dashed=1;strokeColor=#999999;html=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="990" y="100" as="sourcePoint" /><mxPoint x="990" y="820" as="targetPoint" /></mxGeometry></mxCell>
+
+        <mxCell id="m1" value="1: iniciar login" style="html=1;endArrow=block;rounded=0;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="140" y="150" as="sourcePoint" /><mxPoint x="420" y="150" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m2" value="2: redirect /authorize (PKCE challenge, state)" style="html=1;endArrow=block;rounded=0;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="420" y="200" as="sourcePoint" /><mxPoint x="700" y="200" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m3" value="3: apresenta login / MFA" style="html=1;endArrow=open;dashed=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="700" y="250" as="sourcePoint" /><mxPoint x="140" y="250" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m4" value="4: credenciais + MFA" style="html=1;endArrow=block;rounded=0;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="140" y="300" as="sourcePoint" /><mxPoint x="700" y="300" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m5" value="5: redirect com authorization code" style="html=1;endArrow=open;dashed=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="700" y="350" as="sourcePoint" /><mxPoint x="420" y="350" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m6" value="6: troca code + PKCE verifier" style="html=1;endArrow=block;rounded=0;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="420" y="400" as="sourcePoint" /><mxPoint x="700" y="400" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m7" value="7: access + refresh token" style="html=1;endArrow=open;dashed=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="700" y="450" as="sourcePoint" /><mxPoint x="420" y="450" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m8" value="8: Set-Cookie sessão HttpOnly/Secure/SameSite" style="html=1;endArrow=open;dashed=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="420" y="500" as="sourcePoint" /><mxPoint x="140" y="500" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m9" value="9: GET /v1/requests (cookie + CSRF)" style="html=1;endArrow=block;rounded=0;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="140" y="570" as="sourcePoint" /><mxPoint x="420" y="570" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m10" value="10: encaminha com Authorization: Bearer JWT" style="html=1;endArrow=block;rounded=0;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="420" y="620" as="sourcePoint" /><mxPoint x="990" y="620" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m11" value="11: valida assinatura (JWKS), iss/aud/exp, roles" style="html=1;endArrow=block;rounded=0;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="990" y="670" as="sourcePoint" /><mxPoint x="700" y="670" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m12" value="12: 200 dados" style="html=1;endArrow=open;dashed=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="990" y="730" as="sourcePoint" /><mxPoint x="420" y="730" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m13" value="13: 200 dados" style="html=1;endArrow=open;dashed=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="420" y="770" as="sourcePoint" /><mxPoint x="140" y="770" as="targetPoint" /></mxGeometry></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram name="Seq-Publish-Matching">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1300" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" /><mxCell id="1" parent="0" />
+        <mxCell id="t" value="Sequência — Publicar Pedido e Matching Assíncrono" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=16;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="250" y="15" width="800" height="30" as="geometry" /></mxCell>
+
+        <mxCell id="hA" value="Cliente" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="60" y="60" width="140" height="40" as="geometry" /></mxCell>
+        <mxCell id="hB" value="requests" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="290" y="60" width="140" height="40" as="geometry" /></mxCell>
+        <mxCell id="hC" value="Event Registry" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="520" y="60" width="140" height="40" as="geometry" /></mxCell>
+        <mxCell id="hD" value="matching/geo" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="750" y="60" width="140" height="40" as="geometry" /></mxCell>
+        <mxCell id="hE" value="notifications" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="980" y="60" width="140" height="40" as="geometry" /></mxCell>
+        <mxCell id="hF" value="Prestador" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1180" y="60" width="100" height="40" as="geometry" /></mxCell>
+
+        <mxCell id="lA" style="endArrow=none;dashed=1;strokeColor=#999999;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="130" y="100" as="sourcePoint" /><mxPoint x="130" y="800" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lB" style="endArrow=none;dashed=1;strokeColor=#999999;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="360" y="100" as="sourcePoint" /><mxPoint x="360" y="800" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lC" style="endArrow=none;dashed=1;strokeColor=#999999;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="590" y="100" as="sourcePoint" /><mxPoint x="590" y="800" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lD" style="endArrow=none;dashed=1;strokeColor=#999999;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="820" y="100" as="sourcePoint" /><mxPoint x="820" y="800" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lE" style="endArrow=none;dashed=1;strokeColor=#999999;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1050" y="100" as="sourcePoint" /><mxPoint x="1050" y="800" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lF" style="endArrow=none;dashed=1;strokeColor=#999999;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1230" y="100" as="sourcePoint" /><mxPoint x="1230" y="800" as="targetPoint" /></mxGeometry></mxCell>
+
+        <mxCell id="m1" value="1: POST /v1/requests/{id}/publish" style="html=1;endArrow=block;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="130" y="150" as="sourcePoint" /><mxPoint x="360" y="150" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m2" value="2: valida guarda DRAFT→PUBLISHED, grava (mesma tx)" style="html=1;endArrow=block;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="360" y="200" as="sourcePoint" /><mxPoint x="590" y="200" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m3" value="3: 202 Accepted (publicado)" style="html=1;endArrow=open;dashed=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="360" y="250" as="sourcePoint" /><mxPoint x="130" y="250" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="note1" value="após commit: entrega assíncrona at-least-once" style="text;html=1;fontStyle=2;fontColor=#b85450;align=center;" vertex="1" parent="1"><mxGeometry x="470" y="270" width="260" height="20" as="geometry" /></mxCell>
+        <mxCell id="m4" value="4: RequestPublished" style="html=1;endArrow=block;strokeColor=#b85450;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="590" y="310" as="sourcePoint" /><mxPoint x="820" y="310" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m5" value="5: geocode morada (cache) + resolver região" style="html=1;endArrow=block;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="820" y="360" as="sourcePoint" /><mxPoint x="820" y="360" as="targetPoint" /><Array as="points"><mxPoint x="900" y="345" /><mxPoint x="900" y="375" /></Array></mxGeometry></mxCell>
+        <mxCell id="m6" value="6: query PostGIS ST_DWithin + gating (subscrição ACTIVE, categoria, aprovado)" style="html=1;endArrow=block;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="820" y="420" as="sourcePoint" /><mxPoint x="820" y="420" as="targetPoint" /><Array as="points"><mxPoint x="900" y="405" /><mxPoint x="900" y="435" /></Array></mxGeometry></mxCell>
+        <mxCell id="m7" value="7: prestadores elegíveis (ranked)" style="html=1;endArrow=block;strokeColor=#b85450;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="820" y="480" as="sourcePoint" /><mxPoint x="1050" y="480" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m8" value="8: envia push (FCM/APNs) — fallback email" style="html=1;endArrow=block;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1050" y="530" as="sourcePoint" /><mxPoint x="1230" y="530" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m9" value="9: GET /v1/providers/me/requests" style="html=1;endArrow=block;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1230" y="600" as="sourcePoint" /><mxPoint x="360" y="600" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m10" value="10: pedidos elegíveis" style="html=1;endArrow=open;dashed=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="360" y="650" as="sourcePoint" /><mxPoint x="1230" y="650" as="targetPoint" /></mxGeometry></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram name="Seq-Proposal-Booking">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1300" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" /><mxCell id="1" parent="0" />
+        <mxCell id="t" value="Sequência — Proposta → Aceitação → Booking → Avaliação" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=16;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="250" y="15" width="800" height="30" as="geometry" /></mxCell>
+
+        <mxCell id="hA" value="Prestador" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="60" y="60" width="140" height="40" as="geometry" /></mxCell>
+        <mxCell id="hB" value="proposals" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="290" y="60" width="140" height="40" as="geometry" /></mxCell>
+        <mxCell id="hC" value="requests" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="520" y="60" width="140" height="40" as="geometry" /></mxCell>
+        <mxCell id="hD" value="Cliente" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="750" y="60" width="140" height="40" as="geometry" /></mxCell>
+        <mxCell id="hE" value="schedule" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="980" y="60" width="140" height="40" as="geometry" /></mxCell>
+        <mxCell id="hF" value="reviews" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1180" y="60" width="100" height="40" as="geometry" /></mxCell>
+
+        <mxCell id="lA" style="endArrow=none;dashed=1;strokeColor=#999999;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="130" y="100" as="sourcePoint" /><mxPoint x="130" y="820" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lB" style="endArrow=none;dashed=1;strokeColor=#999999;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="360" y="100" as="sourcePoint" /><mxPoint x="360" y="820" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lC" style="endArrow=none;dashed=1;strokeColor=#999999;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="590" y="100" as="sourcePoint" /><mxPoint x="590" y="820" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lD" style="endArrow=none;dashed=1;strokeColor=#999999;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="820" y="100" as="sourcePoint" /><mxPoint x="820" y="820" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lE" style="endArrow=none;dashed=1;strokeColor=#999999;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1050" y="100" as="sourcePoint" /><mxPoint x="1050" y="820" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lF" style="endArrow=none;dashed=1;strokeColor=#999999;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1230" y="100" as="sourcePoint" /><mxPoint x="1230" y="820" as="targetPoint" /></mxGeometry></mxCell>
+
+        <mxCell id="m1" value="1: POST /v1/requests/{id}/proposals (gating: subscrição ativa)" style="html=1;endArrow=block;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="130" y="150" as="sourcePoint" /><mxPoint x="360" y="150" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m2" value="2: cria Proposal SENT (único por request+provider)" style="html=1;endArrow=block;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="360" y="200" as="sourcePoint" /><mxPoint x="360" y="200" as="targetPoint" /><Array as="points"><mxPoint x="440" y="185" /><mxPoint x="440" y="215" /></Array></mxGeometry></mxCell>
+        <mxCell id="m3" value="3: ProposalSent → PUBLISHED→IN_NEGOTIATION" style="html=1;endArrow=block;strokeColor=#b85450;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="360" y="250" as="sourcePoint" /><mxPoint x="590" y="250" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m4" value="4: GET propostas / compara" style="html=1;endArrow=block;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="820" y="310" as="sourcePoint" /><mxPoint x="360" y="310" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m5" value="5: POST /v1/proposals/{id}/accept" style="html=1;endArrow=block;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="820" y="360" as="sourcePoint" /><mxPoint x="360" y="360" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m6" value="6: Proposal→ACCEPTED, request→CONFIRMED, restantes→SUPERSEDED" style="html=1;endArrow=block;strokeColor=#b85450;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="360" y="410" as="sourcePoint" /><mxPoint x="590" y="410" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m7" value="7: ProposalAccepted → cria Booking CONFIRMED" style="html=1;endArrow=block;strokeColor=#b85450;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="360" y="460" as="sourcePoint" /><mxPoint x="1050" y="460" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m8" value="8: POST /v1/bookings/{id}/complete" style="html=1;endArrow=block;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="130" y="530" as="sourcePoint" /><mxPoint x="1050" y="530" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m9" value="9: BookingCompleted (habilita avaliação)" style="html=1;endArrow=block;strokeColor=#b85450;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1050" y="590" as="sourcePoint" /><mxPoint x="1230" y="590" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m10" value="10: POST /v1/reviews (só se Booking COMPLETED)" style="html=1;endArrow=block;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="820" y="660" as="sourcePoint" /><mxPoint x="1230" y="660" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m11" value="11: ReviewSubmitted (atualiza rating_avg)" style="html=1;endArrow=open;dashed=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1230" y="710" as="sourcePoint" /><mxPoint x="130" y="710" as="targetPoint" /></mxGeometry></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram name="Seq-Subscription-Webhook">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1300" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" /><mxCell id="1" parent="0" />
+        <mxCell id="t" value="Sequência — Subscrição e Webhook de Pagamento (idempotente)" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=16;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="250" y="15" width="800" height="30" as="geometry" /></mxCell>
+
+        <mxCell id="hA" value="Prestador" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="60" y="60" width="140" height="40" as="geometry" /></mxCell>
+        <mxCell id="hB" value="subscriptions" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="290" y="60" width="140" height="40" as="geometry" /></mxCell>
+        <mxCell id="hC" value="PaymentGateway&#xa;(Stripe/Eupago)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="520" y="55" width="150" height="50" as="geometry" /></mxCell>
+        <mxCell id="hD" value="payments&#xa;(webhook)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="770" y="55" width="140" height="50" as="geometry" /></mxCell>
+        <mxCell id="hE" value="providers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1000" y="60" width="140" height="40" as="geometry" /></mxCell>
+
+        <mxCell id="lA" style="endArrow=none;dashed=1;strokeColor=#999999;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="130" y="105" as="sourcePoint" /><mxPoint x="130" y="820" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lB" style="endArrow=none;dashed=1;strokeColor=#999999;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="360" y="105" as="sourcePoint" /><mxPoint x="360" y="820" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lC" style="endArrow=none;dashed=1;strokeColor=#999999;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="595" y="105" as="sourcePoint" /><mxPoint x="595" y="820" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lD" style="endArrow=none;dashed=1;strokeColor=#999999;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="840" y="105" as="sourcePoint" /><mxPoint x="840" y="820" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="lE" style="endArrow=none;dashed=1;strokeColor=#999999;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="1070" y="105" as="sourcePoint" /><mxPoint x="1070" y="820" as="targetPoint" /></mxGeometry></mxCell>
+
+        <mxCell id="m1" value="1: POST /v1/subscriptions (plano)" style="html=1;endArrow=block;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="130" y="150" as="sourcePoint" /><mxPoint x="360" y="150" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m2" value="2: cria Subscription PENDING + checkout" style="html=1;endArrow=block;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="360" y="200" as="sourcePoint" /><mxPoint x="595" y="200" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m3" value="3: URL checkout / referência MB" style="html=1;endArrow=open;dashed=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="595" y="250" as="sourcePoint" /><mxPoint x="130" y="250" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m4" value="4: paga (cartão / MB WAY / Multibanco)" style="html=1;endArrow=block;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="130" y="300" as="sourcePoint" /><mxPoint x="595" y="300" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m5" value="5: POST /v1/webhooks/payments/{gateway} (assinado)" style="html=1;endArrow=block;strokeColor=#b85450;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="595" y="360" as="sourcePoint" /><mxPoint x="840" y="360" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m6" value="6: verifica assinatura + raw_event_id único (ignora duplicados)" style="html=1;endArrow=block;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="840" y="410" as="sourcePoint" /><mxPoint x="840" y="410" as="targetPoint" /><Array as="points"><mxPoint x="920" y="395" /><mxPoint x="920" y="425" /></Array></mxGeometry></mxCell>
+        <mxCell id="m7" value="7: 200 OK (rápido)" style="html=1;endArrow=open;dashed=1;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="840" y="460" as="sourcePoint" /><mxPoint x="595" y="460" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m8" value="8: PaymentSucceeded → Subscription ACTIVE" style="html=1;endArrow=block;strokeColor=#b85450;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="840" y="520" as="sourcePoint" /><mxPoint x="360" y="520" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="m9" value="9: SubscriptionActivated → visibility_state = VISIBLE" style="html=1;endArrow=block;strokeColor=#b85450;" edge="1" parent="1"><mxGeometry relative="1" as="geometry"><mxPoint x="360" y="580" as="sourcePoint" /><mxPoint x="1070" y="580" as="targetPoint" /></mxGeometry></mxCell>
+        <mxCell id="note" value="Job de reconciliação (periódico): compara estado local vs gateway; job de expiração varre current_period_end &lt; now." style="text;html=1;fontStyle=2;fontColor=#666666;align=center;rounded=1;fillColor=#f5f5f5;strokeColor=#cccccc;" vertex="1" parent="1"><mxGeometry x="360" y="650" width="710" height="40" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
