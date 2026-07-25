@@ -128,7 +128,10 @@ services:
     image: minio/mc:RELEASE.2025-08-13T08-35-41Z
     container_name: servimatch-minio-init
     restart: "no"
-    entrypoint: ["/bin/sh", "/init/init-buckets.sh"]
+    # `up --wait` trata qualquer container terminado como falha, mesmo com
+    # exit 0 (não distingue job one-shot de crash) — por isso o script corre
+    # e o container fica depois parado em idle, em vez de terminar.
+    entrypoint: ["/bin/sh", "-c", "/init/init-buckets.sh && tail -f /dev/null"]
     environment:
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-servimatch}

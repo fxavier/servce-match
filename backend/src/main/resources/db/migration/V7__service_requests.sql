@@ -1,7 +1,9 @@
 -- Agregado "requests" (ARQUITETURA §4.3, §9.2, §9.4; ADR-0004; ADR-0005).
 -- Address é embutido (nunca referenciado por id) porque o contrato devolve o
 -- endereço completo dentro do próprio ServiceRequest, sem endpoint próprio de
--- morada para pedidos (só user_address é reutilizável, cf. V2).
+-- morada para pedidos. Não existe tabela de moradas reutilizáveis (entidade
+-- Address adiada, cf. ARQUITETURA §9.1): volta quando existir um endpoint
+-- que a leia ou escreva.
 CREATE TABLE service_request (
     id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     customer_id           UUID NOT NULL REFERENCES users (id) ON DELETE RESTRICT,

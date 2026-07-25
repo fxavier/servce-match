@@ -14,7 +14,7 @@ PostGIS, 0006 Redis condicional, 0007 pagamentos).
 | `keycloak` | `quay.io/keycloak/keycloak:26.7.0` | `8081` (→8080 no container) | IdP único (ADR-0002); realm `servimatch` importado no arranque |
 | `redis` | `redis:8.8.1-alpine` | `6379` | Opcional (ADR-0006) — só com `--profile redis` |
 | `minio` | `minio/minio:RELEASE.2025-09-07T16-13-09Z` | `9000` (API), `9001` (consola) | Substituto local de S3 para uploads |
-| `minio-init` | `minio/mc:RELEASE.2025-08-13T08-35-41Z` | — | Job de arranque único: cria o bucket `servimatch-uploads` e garante que é privado |
+| `minio-init` | `minio/mc:RELEASE.2025-08-13T08-35-41Z` | — | Job de arranque: cria o bucket `servimatch-uploads`, garante que é privado, e depois fica em idle (`tail -f /dev/null`) em vez de terminar — um container terminado faz `docker compose up --wait` sair com erro mesmo com exit 0 |
 
 Todos os serviços têm healthcheck; `keycloak` e `minio-init` esperam pelas
 suas dependências (`depends_on: condition: service_healthy`) antes de
@@ -176,4 +176,7 @@ semeia os *client scopes* nativos (`roles`, `profile`, `email`,
 - **`minio-init` falha**: corre
   `docker compose -f infra/docker-compose.yml --env-file .env logs minio-init`;
   o job é idempotente (`mc mb --ignore-existing`), por isso um `up -d` a
-  seguir a uma falha transitória do MinIO é suficiente.
+  seguir a uma falha transitória do MinIO é suficiente. O container fica
+  `Up` (não `Exited`) mesmo depois de o bucket estar criado — isso é
+  propositado, não um sinal de que ficou preso; ver comentário no
+  `docker-compose.yml`.

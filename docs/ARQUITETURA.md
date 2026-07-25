@@ -161,7 +161,7 @@ Cada proposta tem: preço, descrição, prazo (dias/data), validade (data-limite
 - **Catálogo:** categorias e subcategorias hierárquicas; pesquisa e filtros.
 - **Chat:** mensagens, fotografias, documentos, emojis, notificações.
 - **Agenda:** disponibilidade, marcações, lembretes.
-- **Avaliações:** classificação (1–5), comentários, histórico. **Só avalia quem teve um `Booking` em `COMPLETED`** (avaliação verificada).
+- **Avaliações:** classificação (1–5), comentários, histórico. **Só avalia quem teve um `Booking` em `COMPLETED`** (avaliação verificada). São **bilaterais**: cliente avalia prestador e prestador avalia cliente sobre a mesma marcação, cada um uma só vez (§9.2).
 - **Notificações:** push (FCM) e email.
 
 ---
@@ -372,11 +372,13 @@ O `sub` (subject) do token Keycloak é a **chave estável** que liga a identidad
 
 ### 9.1 Entidades principais
 
-`User`, `Role`, `Address`, `CustomerProfile`, `ProviderProfile`, `Company`, `Category`, `ProviderCategory`, `ProviderServiceArea`, `ServiceRequest`, `RequestImage`, `Proposal`, `Conversation`, `Message`, `Booking`, `Review`, `SubscriptionPlan`, `Subscription`, `Payment`, `Notification`, `DeviceToken`, `AuditLog`.
+`User`, `Role`, `Address` (adiada — ver nota abaixo), `CustomerProfile`, `ProviderProfile`, `Company`, `Category`, `ProviderCategory`, `ProviderServiceArea`, `ServiceRequest`, `RequestImage`, `Proposal`, `Conversation`, `Message`, `Booking`, `Review`, `SubscriptionPlan`, `Subscription`, `Payment`, `Notification`, `DeviceToken`, `AuditLog`.
+
+> **`Address` não está no schema v1.** A capacidade "gestão de moradas" (§4.1) mantém-se no roteiro, mas a tabela de moradas reutilizáveis **só é criada quando existir um endpoint que a leia ou escreva**. No contrato v1.0.0 a morada de um pedido é **embebida** em `ServiceRequest` (`address_text` + `location`), não referenciada por `id`: nada aponta para uma tabela de moradas. Criá-la agora não compra nada — é uma tabela nova, sem dados a migrar, pelo que adicioná-la mais tarde custa exatamente o mesmo. Não confundir com `DeviceToken`, que é criada em v1 porque o contrato **já** expõe `/v1/device-tokens`.
 
 ### 9.2 Campos-chave e relações (resumo)
 
-**User** — `id (UUID)`, `keycloak_sub (único)`, `email`, `display_name`, `status`, `created_at`. 1–1 com `CustomerProfile` e/ou `ProviderProfile`; 1–N `Address`.
+**User** — `id (UUID)`, `keycloak_sub (único)`, `email`, `display_name`, `status`, `created_at`. 1–1 com `CustomerProfile` e/ou `ProviderProfile`; 1–N `Address` **quando esta entrar** (§9.1).
 
 **ProviderProfile** — `id`, `user_id`, `company_id?`, `headline`, `bio`, `verified`, `approval_status`, `visibility_state` (derivado da subscrição), `rating_avg`, `rating_count`. N–M com `Category` (via `ProviderCategory`); 1–N `ProviderServiceArea`.
 
@@ -394,7 +396,7 @@ O `sub` (subject) do token Keycloak é a **chave estável** que liga a identidad
 
 **Booking** — `id`, `proposal_id`, `scheduled_start`, `scheduled_end?`, `status`, `completed_at?`.
 
-**Review** — `id`, `booking_id (único)`, `author_id`, `target_id`, `rating (1..5)`, `comment`, `created_at`. Constraint: só se `Booking.status = COMPLETED`.
+**Review** — `id`, `booking_id`, `author_id`, `target_id`, `rating (1..5)`, `comment`, `created_at`. **Único** `(booking_id, author_id)`, **não** `booking_id`: a avaliação é bilateral (§4.2, §4.6), logo a mesma marcação admite **duas** avaliações — uma por participante — mas nenhum autor avalia a mesma marcação duas vezes. É este duplicado por autor que o contrato rejeita com `409`. Constraints: `author_id <> target_id` e só se `Booking.status = COMPLETED`.
 
 **SubscriptionPlan** — `id`, `code`, `name`, `price_cents`, `interval` (`MONTHLY`), `max_categories?`, `max_areas?`, `ranking_boost`, `has_badge`, `active`. (Limites como dados, não código.)
 
