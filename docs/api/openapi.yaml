@@ -725,7 +725,7 @@ components:
       type: object
       properties:
         id: { type: string, format: uuid }
-        parentId: { type: string, format: uuid, nullable: true }
+        parentId: { type: [string, "null"], format: uuid }
         slug: { type: string, example: "canalizacao" }
         name: { type: string, example: "Canalização" }
         active: { type: boolean }
@@ -804,7 +804,7 @@ components:
           type: string
           format: uuid
           description: Identificador a referenciar em `imageIds`/`attachmentIds` após o envio.
-        uploadUrl: { type: string, format: uri, description: URL pré-assinado, de utilização única. }
+        uploadUrl: { type: string, format: uri, description: "URL pré-assinado, de utilização única." }
         method: { type: string, enum: [PUT], default: PUT }
         headers:
           type: object
@@ -848,7 +848,7 @@ components:
           items: { $ref: '#/components/schemas/ImageRef' }
         proposalCount: { type: integer }
         createdAt: { type: string, format: date-time }
-        publishedAt: { type: string, format: date-time, nullable: true }
+        publishedAt: { type: [string, "null"], format: date-time }
       required: [id, customerId, title, status, createdAt]
 
     CreateProposal:
@@ -870,7 +870,7 @@ components:
         price: { $ref: '#/components/schemas/Money' }
         description: { type: string }
         leadTimeDays: { type: integer }
-        validUntil: { type: string, format: date-time, nullable: true }
+        validUntil: { type: [string, "null"], format: date-time }
         status: { $ref: '#/components/schemas/ProposalStatus' }
         createdAt: { type: string, format: date-time }
       required: [id, requestId, providerId, price, status, createdAt]
@@ -881,12 +881,12 @@ components:
         id: { type: string, format: uuid }
         displayName: { type: string }
         headline: { type: string }
-        companyName: { type: string, nullable: true }
+        companyName: { type: [string, "null"] }
         ratingAvg: { type: number, format: float, minimum: 0, maximum: 5 }
         ratingCount: { type: integer }
         verified: { type: boolean }
         premiumBadge: { type: boolean }
-        avatarUrl: { type: string, format: uri, nullable: true }
+        avatarUrl: { type: [string, "null"], format: uri }
       required: [id, displayName, ratingAvg, ratingCount]
 
     CreateMessage:
@@ -909,7 +909,7 @@ components:
           type: array
           items: { $ref: '#/components/schemas/ImageRef' }
         sentAt: { type: string, format: date-time }
-        readAt: { type: string, format: date-time, nullable: true }
+        readAt: { type: [string, "null"], format: date-time }
       required: [id, conversationId, senderId, body, sentAt]
 
     Booking:
@@ -917,12 +917,12 @@ components:
       properties:
         id: { type: string, format: uuid }
         proposalId: { type: string, format: uuid }
-        scheduledStart: { type: string, format: date-time, nullable: true }
-        scheduledEnd: { type: string, format: date-time, nullable: true }
+        scheduledStart: { type: [string, "null"], format: date-time }
+        scheduledEnd: { type: [string, "null"], format: date-time }
         status:
           type: string
           enum: [CONFIRMED, IN_PROGRESS, COMPLETED, CANCELLED, NO_SHOW]
-        completedAt: { type: string, format: date-time, nullable: true }
+        completedAt: { type: [string, "null"], format: date-time }
       required: [id, proposalId, status]
 
     CreateReview:
@@ -954,8 +954,8 @@ components:
         name: { type: string, example: "Professional" }
         price: { $ref: '#/components/schemas/Money' }
         interval: { type: string, enum: [MONTHLY] }
-        maxCategories: { type: integer, nullable: true, description: "null = ilimitado" }
-        maxAreas: { type: integer, nullable: true, description: "null = ilimitado" }
+        maxCategories: { type: [integer, "null"], description: "null = ilimitado" }
+        maxAreas: { type: [integer, "null"], description: "null = ilimitado" }
         rankingBoost: { type: integer, default: 0 }
         hasBadge: { type: boolean }
         active: { type: boolean }
@@ -977,10 +977,9 @@ components:
       properties:
         subscriptionId: { type: string, format: uuid }
         status: { $ref: '#/components/schemas/SubscriptionStatus' }
-        checkoutUrl: { type: string, format: uri, nullable: true, description: Redirecionar (ex.Stripe). }
+        checkoutUrl: { type: [string, "null"], format: uri, description: Redirecionar (ex.Stripe). }
         paymentReference:
-          type: object
-          nullable: true
+          type: [object, "null"]
           description: Referência para métodos como Multibanco.
           properties:
             entity: { type: string }
@@ -1004,7 +1003,7 @@ components:
     PageMeta:
       type: object
       properties:
-        nextCursor: { type: string, nullable: true, description: "null quando não há mais páginas." }
+        nextCursor: { type: [string, "null"], description: "null quando não há mais páginas." }
       required: [nextCursor]
 
     ProposalPage:
