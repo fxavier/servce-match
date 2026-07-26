@@ -4,7 +4,6 @@ import java.sql.Types;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import pt.servimatch.modules.geo.CoverageSql;
@@ -19,16 +18,35 @@ import pt.servimatch.modules.geo.GeoPoint;
 @Repository
 class EligibilityRepository {
 
+    /**
+     * Pacote-privado (não {@code private}) deliberadamente: é a mesma
+     * string SQL que {@link MatchingEligibilityTest} passa a
+     * {@code EXPLAIN (ANALYZE, BUFFERS)} para provar o uso do índice GiST.
+     * Sem esta partilha, um teste que reconstruísse a query "à mão" podia
+     * ficar a testar uma cópia, não o código real — e passar mesmo depois
+     * de alguém reverter o pré-filtro ou o {@code MATERIALIZED} em
+     * {@link CoverageSql}.
+     */
+    static final String FIND_ELIGIBLE_PROVIDER_IDS_SQL = """
+            WITH %s
+            SELECT p.id
+            FROM candidates c
+            JOIN provider_profile p ON p.id = c.provider_id
+            WHERE p.approval_status = 'APPROVED'
+              AND p.visibility_state = 'VISIBLE'
+              AND EXISTS (
+                    SELECT 1 FROM subscription s
+                    WHERE s.provider_id = p.id AND s.status = 'ACTIVE'
+                  )
+              AND EXISTS (
+                    SELECT 1 FROM provider_category pc
+                    WHERE pc.provider_id = p.id AND pc.category_id = :categoryId::uuid
+                  )
+            """.formatted(CoverageSql.CANDIDATE_PROVIDER_IDS_CTE);
+
     private final JdbcClient jdbcClient;
 
-    // @Lazy: pt.servimatch.config.SecurityConfigTest arranca o contexto
-    // completo da aplicação (não uma slice) sem DataSource (ver o seu
-    // application.yml de teste, que a exclui deliberadamente "até existirem
-    // módulos de domínio"). Sem isto, a resolução ansiosa de JdbcClient
-    // (que não existe nesse contexto) impede QUALQUER teste desse ficheiro
-    // de arrancar — ficheiro esse que não é de escrita deste módulo. Não
-    // afeta o comportamento em produção (DataSource está sempre presente).
-    EligibilityRepository(@Lazy JdbcClient jdbcClient) {
+    EligibilityRepository(JdbcClient jdbcClient) {
         this.jdbcClient = jdbcClient;
     }
 
@@ -85,23 +103,7 @@ class EligibilityRepository {
      * justificação, provada por {@code EXPLAIN}.
      */
     Set<UUID> findEligibleProviderIds(UUID categoryId, GeoPoint point, String regionCode) {
-        String sql = """
-                WITH %s
-                SELECT p.id
-                FROM candidates c
-                JOIN provider_profile p ON p.id = c.provider_id
-                WHERE p.approval_status = 'APPROVED'
-                  AND p.visibility_state = 'VISIBLE'
-                  AND EXISTS (
-                        SELECT 1 FROM subscription s
-                        WHERE s.provider_id = p.id AND s.status = 'ACTIVE'
-                      )
-                  AND EXISTS (
-                        SELECT 1 FROM provider_category pc
-                        WHERE pc.provider_id = p.id AND pc.category_id = :categoryId::uuid
-                      )
-                """.formatted(CoverageSql.CANDIDATE_PROVIDER_IDS_CTE);
-        List<UUID> ids = jdbcClient.sql(sql)
+        List<UUID> ids = jdbcClient.sql(FIND_ELIGIBLE_PROVIDER_IDS_SQL)
                 .param("categoryId", categoryId)
                 .param("lat", point == null ? null : point.lat(), Types.DOUBLE)
                 .param("lon", point == null ? null : point.lon(), Types.DOUBLE)
