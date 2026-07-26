@@ -2,9 +2,11 @@ package pt.servimatch.config;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -21,20 +23,37 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Cobertura mínima da configuração de segurança transversal (ADR-0002/0009):
  * sem token é 401, com role errada é 403, com role certa é 200 — sempre em
- * formato RFC 9457 quando aplicável. Usa um controller descartável, definido
- * apenas neste teste, porque nenhum módulo de domínio existe ainda nesta
- * onda; o que se verifica aqui é o comportamento do
- * {@code SecurityFilterChain} em si, não uma rota de negócio.
+ * formato RFC 9457 quando aplicável.
+ *
+ * <p>Carrega deliberadamente <b>apenas</b> {@link SecurityConfig} e as duas
+ * configurações de que depende ({@link RateLimitConfig},
+ * {@link IdempotencyConfig}), mais autoconfiguração do Spring Boot — nunca
+ * {@code ServiMatchApplication}. Isto evita o scan de {@code pt.servimatch}
+ * completo (e, com ele, dos {@code @Repository} dos módulos de domínio, que
+ * precisam de um {@code JdbcClient}/{@code DataSource} que este slice não
+ * fornece nem deve fornecer: o que se verifica aqui é o comportamento do
+ * {@code SecurityFilterChain} em si, contra um controller descartável, não
+ * uma rota de negócio nem persistência). Módulos de domínio validam a sua
+ * própria integração com segurança nos respetivos testes, com Testcontainers.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, classes = SecurityConfigTest.TestConfig.class)
 @AutoConfigureMockMvc
 class SecurityConfigTest {
 
     @Autowired
     private MockMvc mockMvc;
 
-    @TestConfiguration
-    static class ProbeControllerConfig {
+    @Configuration
+    // spring-modulith-starter-test traz o runtime do Modulith para o
+    // classpath de teste, cuja autoconfiguração exige uma classe anotada
+    // @SpringBootApplication (ServiMatchApplication) para descobrir os
+    // módulos — irrelevante aqui, e é precisamente o que este teste evita
+    // arrancar. A verificação de fronteiras de módulo tem o seu próprio
+    // teste (pt.servimatch.ModularityTests), que usa ServiMatchApplication
+    // a sério.
+    @EnableAutoConfiguration(excludeName = "org.springframework.modulith.runtime.autoconfigure.SpringModulithRuntimeAutoConfiguration")
+    @Import({SecurityConfig.class, RateLimitConfig.class, IdempotencyConfig.class})
+    static class TestConfig {
 
         @RestController
         static class ProbeController {

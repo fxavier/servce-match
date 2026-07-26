@@ -181,6 +181,22 @@
       <scope>test</scope>
     </dependency>
 
+    <!-- Testcontainers (ADR-0003 stack, CLAUDE.md §5): testes de integração
+         dos módulos de domínio contra um Postgres/PostGIS real, em vez de um
+         banco embutido que não replica o comportamento de produção.
+         Versões geridas pela BOM importada por spring-boot-starter-parent —
+         não fixar aqui. -->
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+
   </dependencies>
 
   <build>
