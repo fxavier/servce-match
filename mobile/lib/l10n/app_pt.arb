@@ -1,0 +1,68 @@
+{
+  "@@locale": "pt",
+  "appTitle": "ServiMatch",
+  "commonRetry": "Tentar novamente",
+  "commonCancel": "Cancelar",
+  "commonSave": "Guardar",
+  "commonLoading": "A carregar...",
+  "commonOfflineTitle": "Sem ligação à internet",
+  "commonOfflineMessage": "Verifica a tua ligação e tenta novamente.",
+  "commonGenericErrorTitle": "Algo correu mal",
+  "commonGenericErrorMessage": "Não foi possível concluir o pedido. Tenta novamente.",
+  "commonEmptyTitle": "Nada para mostrar",
+  "commonUnknown": "Desconhecido",
+
+  "authLoginTitle": "Entrar no ServiMatch",
+  "authLoginSubtitle": "Encontra prestadores de confiança perto de ti.",
+  "authLoginButton": "Entrar",
+  "authLoggingIn": "A abrir sessão...",
+  "authCancelled": "Início de sessão cancelado.",
+  "authSessionExpired": "A tua sessão expirou. Entra novamente.",
+  "authLogout": "Terminar sessão",
+
+  "versionUpdateRequiredTitle": "Atualização necessária",
+  "versionUpdateRequiredMessage": "Esta versão da app já não é suportada. Atualiza para continuares a usar o ServiMatch.",
+  "versionUpdateButton": "Atualizar agora",
+  "versionUpdateRecommendedMessage": "Existe uma nova versão do ServiMatch disponível.",
+
+  "homeCustomerGreeting": "Olá, {name}",
+  "@homeCustomerGreeting": {
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "homeCreateRequestCta": "Criar um pedido",
+  "homeProviderComingSoonTitle": "Área do prestador",
+  "homeProviderComingSoonMessage": "A caixa de entrada de pedidos para prestadores chega numa próxima versão.",
+
+  "requestFormTitle": "Novo pedido",
+  "requestFormCategoryLabel": "Categoria",
+  "requestFormTitleLabel": "Título",
+  "requestFormDescriptionLabel": "Descrição",
+  "requestFormCityLabel": "Cidade",
+  "requestFormPostalCodeLabel": "Código postal",
+  "requestFormUrgencyLabel": "Urgência",
+  "requestFormSubmit": "Publicar pedido",
+  "requestFormSubmitting": "A publicar...",
+  "requestFormSuccess": "Pedido publicado com sucesso.",
+  "requestFormValidationRequired": "Campo obrigatório.",
+  "requestFormValidationTitleLength": "O título deve ter entre 3 e 140 carateres.",
+
+  "urgencyLow": "Sem pressa",
+  "urgencyNormal": "Normal",
+  "urgencyHigh": "Alta",
+  "urgencyUrgent": "Urgente",
+
+  "proposalsTitle": "Propostas recebidas",
+  "proposalsEmptyMessage": "Ainda não há propostas para este pedido.",
+  "proposalsCountLabel": "{count, plural, =0{Sem propostas} one{1 proposta} other{{count} propostas}}",
+  "@proposalsCountLabel": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "proposalPriceLabel": "Preço",
+  "proposalLeadTimeLabel": "Prazo: {days} dias",
+  "@proposalLeadTimeLabel": {
+    "placeholders": { "days": { "type": "int" } }
+  },
+
+  "subscriptionRequiredTitle": "Subscrição necessária",
+  "subscriptionRequiredMessage": "Precisas de uma subscrição ativa para usar esta funcionalidade."
+}
