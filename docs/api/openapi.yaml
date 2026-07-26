@@ -668,6 +668,10 @@ components:
         status: { type: integer, example: 422 }
         detail: { type: string, example: "O campo 'categoryId' é obrigatório." }
         instance: { type: string, format: uri }
+        correlationId:
+          type: string
+          description: Identificador de correlação do pedido, para referência de suporte. Corresponde ao cabeçalho X-Correlation-Id da resposta e aos logs do servidor.
+          example: "91c25c40-35f9-4989-a2c0-dd34749aa301"
         errors:
           type: array
           description: Erros de validação por campo (extensão).
