@@ -1,0 +1,9 @@
+# Artefactos do Playwright (ver e2e/playwright.config.ts)
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
+# Cliente gerado a partir do contrato é committed (ver skill
+# openapi-contract-first — permite detetar deriva na pipeline), mas o
+# .tsbuildinfo e outros caches locais não.
