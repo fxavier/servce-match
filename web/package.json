@@ -1,0 +1,29 @@
+{
+  "name": "servimatch-web",
+  "private": true,
+  "version": "0.1.0",
+  "description": "ServiMatch — SPA React (app) + BFF Node/Express (bff). Ver README.md.",
+  "workspaces": [
+    "app",
+    "bff"
+  ],
+  "scripts": {
+    "dev:app": "npm run dev --workspace app",
+    "dev:bff": "npm run dev --workspace bff",
+    "build": "npm run build --workspace app && npm run build --workspace bff",
+    "lint": "npm run lint --workspace app && npm run lint --workspace bff",
+    "typecheck": "npm run typecheck --workspace app && npm run typecheck --workspace bff",
+    "test": "npm run test --workspace app && npm run test --workspace bff",
+    "test:e2e": "playwright test --config e2e/playwright.config.ts",
+    "generate:api": "npm run generate:api --workspace app"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "oauth2-mock-server": "^9.1.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
