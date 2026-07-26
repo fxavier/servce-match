@@ -3,7 +3,6 @@ package pt.servimatch.modules.search.internal;
 import java.sql.Types;
 import java.util.List;
 import java.util.UUID;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import pt.servimatch.modules.geo.CoverageSql;
@@ -28,10 +27,7 @@ class ProviderSearchRepository {
 
     private final JdbcClient jdbcClient;
 
-    // @Lazy: ver o mesmo comentário em matching.internal.EligibilityRepository
-    // — pt.servimatch.config.SecurityConfigTest arranca o contexto completo
-    // sem DataSource; não afeta o comportamento em produção.
-    ProviderSearchRepository(@Lazy JdbcClient jdbcClient) {
+    ProviderSearchRepository(JdbcClient jdbcClient) {
         this.jdbcClient = jdbcClient;
     }
 

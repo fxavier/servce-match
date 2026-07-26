@@ -46,11 +46,23 @@ package pt.servimatch.modules.geo;
  *
  * <p><b>Uso:</b> embutir {@link #CANDIDATE_PROVIDER_IDS_CTE} como uma CTE
  * {@code WITH} antes de juntar com {@code provider_profile}/etc. O
- * qualificador {@code MATERIALIZED} não é opcional: sem ele, o planeador
- * subestima drasticamente a cardinalidade da faixa geográfica devolvida (o
- * estimador do PostgreSQL não tem boas estatísticas para predicados GiST) e
- * escolhe nested loops com seq scan a jusante — confirmado por EXPLAIN:
- * ~1.2 s vs ~70 ms com a CTE materializada, para o mesmo resultado.
+ * qualificador {@code MATERIALIZED} não é opcional: garante que a CTE é
+ * avaliada exatamente uma vez (visível no plano como um nó próprio,
+ * {@code CTE Scan on candidates}) em vez de ser embutida ("inlined") na
+ * consulta principal como um simples predicado correlacionado. Sem ele —
+ * testado isoladamente, mantendo o pré-filtro de raio constante — o
+ * PostgreSQL pode optar por reavaliar a mesma condição geográfica uma vez
+ * por linha externa (confirmado por EXPLAIN com 20 000 prestadores: sem
+ * pré-filtro nem {@code MATERIALIZED}, o nó de {@code provider_service_area}
+ * aparece com {@code loops=17066} e ~1.5 s; com ambos, {@code loops=1} e
+ * ~150 ms). Os dois mecanismos protegem coisas distintas — o pré-filtro dá
+ * ao planeador uma estimativa de cardinalidade utilizável; o
+ * {@code MATERIALIZED} garante que essa estimativa não é ignorada por uma
+ * reavaliação por linha — por isso ambos ficam neste único fragmento
+ * partilhado, e {@code MatchingEligibilityTest} verifica os dois sinais em
+ * separado por {@code EXPLAIN} (não por tempo de execução, que varia com a
+ * máquina): {@code Index Cond} com {@code _st_expand} para o pré-filtro,
+ * {@code CTE Scan on candidates} para a materialização.
  *
  * <p>Parâmetros nomeados esperados pelo consumidor (todos com cast SQL
  * explícito no fragmento, para evitar o erro clássico do driver JDBC do
