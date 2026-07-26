@@ -30,9 +30,19 @@ export interface AuthDeps {
 
 const SCOPE = 'openid profile email';
 
-/** Só aceita caminhos relativos internos como destino pós-login/logout — nunca uma URL absoluta (open redirect). */
-function sanitizeReturnTo(value: unknown): string {
-  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//')) {
+/**
+ * Só aceita caminhos relativos internos como destino pós-login/logout —
+ * nunca uma URL absoluta (open redirect). Browsers normalizam `\` para `/`
+ * em URLs, por isso `/\evil.com` ou `\/evil.com` viram, na prática,
+ * `//evil.com` (protocol-relative) — a mesma classe de bypass do
+ * CVE-2025-68470 no react-router. Normaliza antes de validar.
+ */
+export function sanitizeReturnTo(value: unknown): string {
+  if (typeof value !== 'string' || value.length === 0) {
+    return '/';
+  }
+  const normalized = value.replace(/\\/g, '/');
+  if (!normalized.startsWith('/') || normalized.startsWith('//')) {
     return '/';
   }
   return value;
