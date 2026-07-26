@@ -1,0 +1,19 @@
+# Perfil de teste para as suítes de integração HTTP dos módulos
+# billing/payments (agente backend-payments) que precisam de uma base de
+# dados real (CLAUDE.md, critérios de aceitação: "provado contra a BD
+# real"). O application.yml de teste (agente qa-e2e/backend-platform, não
+# editado aqui) exclui DataSource/Flyway/registo de eventos JDBC por
+# omissão — este ficheiro NOVO (não sobrepõe o existente) reativa-os
+# apenas quando este perfil está ativo (`@ActiveProfiles("payments-it")`).
+#
+# Fonte da base de dados: pt.servimatch.testsupport.SharedPostgis, ligada
+# via @DynamicPropertySource nos testes que ativam este perfil.
+spring:
+  autoconfigure:
+    exclude: []
+  flyway:
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+  modulith:
+    events:
+      republish-outstanding-events-on-restart: false
