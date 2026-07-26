@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- ADR-0009 (RFC 8252): permite que o Universal Link
+	     https://app.servimatch.pt/oauth2redirect volte a abrir esta app em
+	     vez do browser, ao terminar o fluxo de autenticação. Só funciona
+	     depois de o domínio hospedar apple-app-site-association (fora de
+	     mobile/**, coordenar com platform-infra/web-frontend). -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:app.servimatch.pt</string>
+	</array>
+</dict>
+</plist>
