@@ -1,5 +1,7 @@
 package pt.servimatch.modules.payments.internal;
 
+import com.zaxxer.hikari.HikariDataSource;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -29,16 +31,46 @@ import static org.assertj.core.api.Assertions.assertThat;
  * gateway já reporta pago) é corrigida pelo job periódico, sem depender de
  * nenhum webhook. Usa um {@link PaymentGateway} de teste (não chama nenhum
  * gateway real) e Postgres real via {@link TestDatabase}.
+ *
+ * <p><b>Porquê uma pool aqui e não {@link TestDatabase#jdbcClient()}
+ * diretamente:</b> {@link ReconciliationJob#reconcile()} varre, de
+ * propósito, <em>todas</em> as subscrições {@code PENDING}/{@code ACTIVE}/
+ * {@code PAST_DUE} do contentor Postgres partilhado (é a cobertura real que
+ * este teste prova — não se restringe à subscrição criada aqui). Esse
+ * contentor é partilhado por toda a JVM de testes e nunca é limpo entre
+ * classes ({@code SharedPostgis}), incluindo dezenas de milhares de
+ * subscrições semeadas por {@code MatchingEligibilityTest} para exercitar o
+ * planeador do PostGIS. {@link TestDatabase#dataSource()} é um
+ * {@code PGSimpleDataSource} sem pooling: cada uma dessas linhas
+ * varridas custava uma ligação TCP nova através do encaminhamento de porta
+ * do Docker — o multiplicador exato que tornava este teste (2 asserções)
+ * o gargalo de toda a suíte. Reutilizar ligações via uma pool pequena e
+ * local a este ficheiro elimina esse custo sem reduzir o volume varrido
+ * nem o que é provado.
  */
 class ReconciliationJobIntegrationTest {
 
-    private final JdbcClient jdbcClient = TestDatabase.jdbcClient();
+    private final HikariDataSource pooledDataSource = pooledDataSource();
+    private final JdbcClient jdbcClient = JdbcClient.create(pooledDataSource);
     private final DefaultSubscriptionLifecycle lifecycle = new DefaultSubscriptionLifecycle(
             new JdbcSubscriptionPlanRepository(jdbcClient),
             new JdbcSubscriptionRepository(jdbcClient),
             event -> { });
     private final JdbcPaymentRepository paymentRepository = new JdbcPaymentRepository(jdbcClient);
     private final JdbcPaymentGatewayEventRepository eventRepository = new JdbcPaymentGatewayEventRepository(jdbcClient);
+
+    private static HikariDataSource pooledDataSource() {
+        HikariDataSource dataSource = new HikariDataSource();
+        dataSource.setDataSource(TestDatabase.dataSource());
+        dataSource.setPoolName("ReconciliationJobIntegrationTest");
+        dataSource.setMaximumPoolSize(4);
+        return dataSource;
+    }
+
+    @AfterEach
+    void closePool() {
+        pooledDataSource.close();
+    }
 
     @Test
     void correctsALocalPendingSubscriptionWhenGatewayAlreadyReportsPaid() {
