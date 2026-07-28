@@ -25,21 +25,29 @@
  * {@code backend-payments}: ao fazer essa troca, pedir aqui a adição de
  * {@code "providers"} (e/ou {@code "users"}) a {@code allowedDependencies}.
  *
- * <p>Convenção de eventos de domínio (decisão desta onda, ver também
+ * <p>Convenção de eventos de domínio (decisão da onda anterior, ver também
  * {@code pt.servimatch.modules.chat.package-info}): eventos consumidos por
- * <b>outro</b> módulo vivem no pacote de topo do módulo publicador, não num
- * subpacote {@code events} sem {@code @NamedInterface} — o Modulith só
- * expõe por omissão o pacote de topo, e {@code proposals} já teve de mover
- * {@code ProposalAccepted} para lá por este motivo (pedido do
- * {@code backend-domain} nesta onda). O subpacote
- * {@code billing.internal.events}... na verdade {@code billing.events}
- * (sem {@code internal}) já existe aqui e, hoje, nada fora de
- * {@code billing} o importa — não é uma violação em vigor, só uma
- * inconsistência com a convenção agora fixada. Não movido nesta revisão
- * (fora do âmbito de escrita deste agente); sinalizado a
- * {@code backend-payments} caso algum consumidor externo (ex.
- * {@code notifications}) venha a precisar de {@code SubscriptionActivated}
- * e afins.
+ * <b>outro</b> módulo vivem, em geral, no pacote de topo do módulo
+ * publicador, não num subpacote {@code events} sem {@code @NamedInterface}
+ * — o Modulith só expõe por omissão o pacote de topo, e {@code proposals}/
+ * {@code requests} moveram os seus eventos para lá por este motivo. O
+ * subpacote {@code billing.events} (sem {@code internal}) já existia com
+ * essa forma antes de a convenção ficar fixada; ficou sinalizado, mas não
+ * resolvido, na revisão anterior, por não ter consumidor externo.
+ *
+ * <p><b>Resolvido nesta revisão (Onda 1b):</b> {@code modules.notifications}
+ * passou a consumir {@code SubscriptionActivated}/{@code PastDue}/
+ * {@code Expired}/{@code Cancelled} via {@code @ApplicationModuleListener},
+ * o que teria partido {@code verify()}. Mover os quatro registos de evento
+ * para o pacote de topo de {@code billing} alteraria código de
+ * {@code backend-payments} — fora do âmbito de escrita deste agente. Em vez
+ * disso, {@code billing.events} passou a ter {@code @NamedInterface("events")}
+ * (ver {@code pt.servimatch.modules.billing.events.package-info}) — a
+ * correção mais pequena, sem tocar em código de domínio. Se
+ * {@code backend-payments} preferir mover os eventos para o pacote de topo
+ * no futuro (alinhando com {@code proposals}/{@code requests}), a
+ * {@code @NamedInterface} deixa de ser necessária; pedido nesse sentido a
+ * este agente, não uma decisão unilateral de {@code backend-payments}.
  */
 @org.springframework.modulith.ApplicationModule(
         displayName = "Billing",
