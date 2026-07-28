@@ -34,6 +34,12 @@ public final class ProblemType {
     /** {@code Idempotency-Key} reutilizada com um pedido diferente. */
     public static final String IDEMPOTENCY_KEY_CONFLICT = BASE_URI + "idempotency-key-conflict";
 
+    /** Corpo/ficheiro acima do limite permitido (ex.: upload maior que o limite do {@code purpose}). */
+    public static final String PAYLOAD_TOO_LARGE = BASE_URI + "payload-too-large";
+
+    /** {@code Content-Type} declarado não suportado para a operação/finalidade. */
+    public static final String UNSUPPORTED_MEDIA_TYPE = BASE_URI + "unsupported-media-type";
+
     /** Limite de pedidos excedido (Bucket4j). */
     public static final String RATE_LIMITED = BASE_URI + "rate-limited";
 
