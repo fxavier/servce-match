@@ -1,0 +1,17 @@
+# Perfil de teste para a suíte de integração HTTP do módulo notifications
+# (agente backend-platform), mesmo padrão que application-uploads-it.yml:
+# reativa DataSource/Flyway/registo de eventos JDBC (desligados no
+# application.yml de teste, agente qa-e2e/backend-platform, não editado
+# aqui) só quando `@ActiveProfiles("notifications-it")` está ativo.
+#
+# Fonte da base de dados: pt.servimatch.testsupport.SharedPostgis, ligada
+# via @DynamicPropertySource no teste.
+spring:
+  autoconfigure:
+    exclude: []
+  flyway:
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+  modulith:
+    events:
+      republish-outstanding-events-on-restart: false

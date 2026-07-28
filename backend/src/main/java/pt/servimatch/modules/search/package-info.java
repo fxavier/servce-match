@@ -7,8 +7,14 @@
  * <p>Fronteira declarada pelo agente {@code backend-platform} na Onda 0
  * (esqueleto vazio). Implementação pertence ao agente {@code backend-matching}
  * — ver {@code docs/AGENTES.md}.
+ *
+ * <p>{@code allowedDependencies} fechado nesta revisão (Onda 1b,
+ * {@code backend-platform}), a partir dos imports reais: só {@code geo}
+ * (filtro geográfico de {@code GET /v1/search/providers}). Um módulo que
+ * precise de uma dependência nova pede-a a este agente.
  */
 @org.springframework.modulith.ApplicationModule(
-        displayName = "Search"
+        displayName = "Search",
+        allowedDependencies = {"modules.geo"}
 )
 package pt.servimatch.modules.search;

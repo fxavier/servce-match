@@ -6,8 +6,13 @@
  * <p>Fronteira declarada pelo agente {@code backend-platform} na Onda 0
  * (esqueleto vazio). Implementação pertence ao agente {@code backend-matching}
  * — ver {@code docs/AGENTES.md} e {@code docs/ARQUITETURA.md} §10.
+ *
+ * <p>Módulo-folha: {@code allowedDependencies} vazio nesta revisão (Onda
+ * 1b, {@code backend-platform}) — sem imports de outro módulo hoje;
+ * consumido por {@code matching} e {@code search}, nunca o inverso.
  */
 @org.springframework.modulith.ApplicationModule(
-        displayName = "Geo"
+        displayName = "Geo",
+        allowedDependencies = {}
 )
 package pt.servimatch.modules.geo;
