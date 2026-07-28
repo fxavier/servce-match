@@ -13,6 +13,7 @@ Registo de decisões arquiteturais no formato [MADR](https://adr.github.io/madr/
 | [ADR-0007](0007-pagamentos-multi-gateway.md) | Estratégia de pagamentos multi-gateway | Aceite |
 | [ADR-0008](0008-app-movel-flutter.md) | Aplicação móvel Flutter (multi-cliente, app única, fast-follow) | Aceite |
 | [ADR-0009](0009-autenticacao-clientes-nativos.md) | Autenticação de clientes nativos (RFC 8252 / AppAuth + PKCE) | Aceite |
+| [ADR-0010](0010-acesso-sql-entre-modulos.md) | Acesso a tabelas de outro módulo: leitura sob condições, escrita proibida | Aceite |
 
 ## Estados possíveis
 

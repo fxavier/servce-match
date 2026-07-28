@@ -26,8 +26,19 @@ CREATE INDEX idx_service_area_center ON provider_service_area USING GIST (center
 `ST_DWithin` usa o índice; `ST_Distance(...) < x` **não** usa e força varrimento
 completo. Escreve sempre `ST_DWithin`.
 
+**Mas `ST_DWithin` com a distância numa coluna também não usa o índice.** O
+índice só é ativado se o planeador conseguir construir a caixa
+`center && _st_expand(:ponto, d)`, o que exige `d` **constante no momento do
+planeamento**. Com `radius_m` a variar por linha, o plano mostra a condição como
+`Filter`, nunca como `Index Cond` — medido neste repositório com 20 000
+prestadores. A correção é um `ST_DWithin` redundante com limite constante como
+pré-filtro, antes do exato, e um `CHECK` no esquema que garanta que nenhum raio
+o excede. Ver `docs/ARQUITETURA.md` §10.3 e `geo.CoverageSql`: reutiliza esse
+fragmento em vez de reescrever o predicado.
+
 Confirma o uso do índice com `EXPLAIN (ANALYZE, BUFFERS)` e volume realista. Com
-poucas linhas o planeador prefere *seq scan* e o teste não prova nada.
+poucas linhas o planeador prefere *seq scan* e o teste não prova nada. Asserta
+sobre o **plano** (`Index Cond`, `CTE Scan`), não sobre tempo de execução.
 
 ## Dois modos de cobertura
 
@@ -38,14 +49,23 @@ alterar o predicado.
 
 ```sql
 AND (
-      (a.mode = 'RADIUS'       AND ST_DWithin(a.center, :requestPoint, a.radius_m))
+      (a.mode = 'RADIUS'
+       AND ST_DWithin(a.center, :requestPoint, :maxRadiusM)   -- pré-filtro constante: dá o Index Cond
+       AND ST_DWithin(a.center, :requestPoint, a.radius_m))   -- correção exata
    OR (a.mode = 'ADMIN_REGION' AND a.region_code = :requestRegion)
 )
 ```
 
+Se embrulhares isto numa CTE, usa `AS MATERIALIZED`: sem o qualificador o
+PostgreSQL pode embutir a CTE e reavaliar a condição por linha externa
+(`loops=17066` em vez de `loops=1`, medido). O pré-filtro e o `MATERIALIZED`
+resolvem problemas **diferentes** — não bastam um sem o outro, e o teste de
+regressão verifica os dois sinais em separado.
+
 Um `OR` sobre modos diferentes pode produzir planos maus à medida que o volume
 cresce. Se acontecer, separa em dois ramos (`UNION ALL` por modo) — mas só com
-`EXPLAIN` que o justifique, não preventivamente.
+`EXPLAIN` que o justifique, não preventivamente (aqui, o `BitmapOr` combina o
+GiST de `center` com o índice de `region_code` sem problema).
 
 Garante coerência com CHECK no schema: `RADIUS` exige `center` e `radius_m`;
 `ADMIN_REGION` exige `region_code`. Sem isso acumulas linhas que não

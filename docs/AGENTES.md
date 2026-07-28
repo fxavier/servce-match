@@ -59,7 +59,7 @@ segredos), que são do `backend-platform`.
 Nada em paralelo arranca antes de isto estar feito, porque tudo o resto depende
 destes artefactos.
 
-1. `arquiteto` — ADR-0001 a ADR-0009 aceites e sem decisões em aberto (ADR-0003
+1. `arquiteto` — ADR-0001 a ADR-0010 aceites e sem decisões em aberto (ADR-0003
    fechado em Boot 3.5.x + Modulith 1.4.x + Java 21). Revalida a coerência entre
    `docs/ARQUITETURA.md`, os ADR e o contrato antes de dar seguimento. **Feito.**
 2. `api-contract` — `POST /v1/uploads` está no contrato; 18 caminhos /

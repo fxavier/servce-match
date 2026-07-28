@@ -9,8 +9,10 @@ description: Como criar ou alterar um módulo de domínio no backend ServiMatch 
 
 ```
 pt.servimatch.modules.<modulo>/
+├── package-info.java         # @ApplicationModule — só o backend-platform o escreve
 ├── <Modulo>Api.java          # API pública: interface + DTOs expostos
-├── events/                   # eventos publicados (parte do contrato público)
+├── <Evento>.java             # eventos publicados, no pacote de TOPO (ver abaixo)
+├── web/                      # controladores e DTO expostos, quando os há
 └── internal/                 # tudo o resto: entidades, repositórios, serviços
     ├── <Entidade>.java
     ├── <Entidade>Repository.java
@@ -18,8 +20,19 @@ pt.servimatch.modules.<modulo>/
     └── <Modulo>Controller.java
 ```
 
-Regra: um módulo só pode importar do pacote de topo de outro módulo e dos seus
-`events`. Importar de `internal` alheio é violação e o build falha.
+Regra: um módulo só pode importar do **pacote de topo** de outro módulo.
+Importar de `internal` alheio é violação e o build falha.
+
+**Eventos ficam no pacote de topo, não num subpacote `events/`.** O Spring
+Modulith expõe por omissão apenas o pacote de topo; um `events/` consumível de
+fora exigiria `@NamedInterface` num `package-info.java` próprio — e esses
+ficheiros são todos do `backend-platform` (CLAUDE.md §3). `billing` ainda usa
+`events/` por razões históricas; não copies esse padrão.
+
+**Fronteira por SQL.** `ApplicationModules.verify()` só vê tipos Java: uma
+consulta a uma tabela de outro módulo passa despercebida. Escrever em tabela
+alheia é proibido; ler só nos casos enumerados no **ADR-0010**. Precisas de mais
+um? Pede ao `arquiteto`, não acrescentes o `JOIN`.
 
 ## Comunicação entre módulos
 

@@ -220,7 +220,7 @@ Base legal por finalidade, minimização de dados, direito ao apagamento e à po
 Uma única aplicação deployável, internamente particionada em **módulos de aplicação** com fronteiras verificadas em tempo de teste. Cada módulo:
 
 - Expõe uma **API pública mínima** (interfaces/serviços e DTOs) e mantém o resto *package-private*.
-- **Não acede** ao esquema de tabelas de outro módulo; a integração faz-se por **chamada à API pública** (síncrona) ou por **evento de domínio** (assíncrona, preferida para efeitos colaterais).
+- Integra-se por **chamada à API pública** (síncrona) ou por **evento de domínio** (assíncrona, preferida para efeitos colaterais). **Nunca escreve** em tabelas de outro módulo; a **leitura** só é permitida nos casos enumerados no **ADR-0010** (consultas de conjunto em `matching`, `search` e `billing`), porque `ApplicationModules.verify()` não a consegue verificar.
 - É candidato a extração futura para serviço próprio sem reescrita do domínio.
 
 ### 6.2 Vista de contexto (C4 nível 1, textual)
@@ -250,31 +250,108 @@ Ambos os clientes (web e mobile) são consumidores da **mesma API REST** e auten
 
 ### 6.3 Módulos e dependências permitidas
 
-| Módulo | Responsabilidade | Depende de (API pública) | Publica eventos |
-|---|---|---|---|
-| `common` | tipos partilhados, erros, utilitários | — | — |
-| `auth` (adapter) | mapeamento de identidade Keycloak ↔ utilizador de domínio | users | `UserProvisioned` |
-| `users` | conta de domínio, papéis, moradas | common | `UserRegistered` |
-| `customers` | perfil de cliente | users | — |
-| `providers` | perfil profissional, empresa, portfólio, categorias, zonas | users, categories | `ProviderActivated`, `ProviderDeactivated` |
-| `categories` | catálogo, subcategorias | common | — |
-| `requests` | pedidos, imagens, estados | customers, categories | `RequestPublished`, `RequestConfirmed`, `RequestCancelled` |
-| `proposals` | propostas, estados | requests, providers | `ProposalSent`, `ProposalAccepted` |
-| `subscriptions` | planos, subscrições, ciclo de vida | providers | `SubscriptionActivated`, `SubscriptionExpired` |
-| `payments` | pagamentos de planos, webhooks | subscriptions | `PaymentSucceeded`, `PaymentFailed` |
-| `chat` | conversas, mensagens | requests, users | `MessageSent` |
-| `schedule` | disponibilidade, marcações, lembretes | proposals | `BookingConfirmed`, `BookingCompleted` |
-| `reviews` | avaliações verificadas | schedule | `ReviewSubmitted` |
-| `notifications` | push (FCM/APNs) e email, preferências, registo de `DeviceToken` (multi-dispositivo) | (subscreve eventos) | — |
-| `admin` | gestão, moderação, estatísticas | (leitura transversal via APIs) | — |
+Cada módulo é um pacote `pt.servimatch.modules.<nome>` com `package-info.java`
+anotado com `@ApplicationModule` (propriedade do `backend-platform`, §15.2). A
+coluna "Depende de" lista **dependências de tipos Java** — as únicas que
+`ApplicationModules.verify()` consegue verificar; o acesso de leitura a tabelas
+de outro módulo é uma questão à parte, decidida no **ADR-0010**.
 
-**Padrão de integração-chave.** `requests` publica `RequestPublished`; `matching` (dentro de `providers`/serviço de matching) e `notifications` reagem de forma **assíncrona** (`@ApplicationModuleListener`, transacional e por defeito assíncrono no Spring Modulith). Isto mantém a publicação do pedido rápida e desacoplada, e torna o efeito "notificar prestadores elegíveis" resiliente (com *event publication registry* para reentrega em falha).
+| Módulo | Responsabilidade | Depende de (API pública) | Publica eventos | Estado |
+|---|---|---|---|---|
+| `users` | contas, papéis, moradas; ligação `keycloak_sub` ↔ `User` (provisionamento *just-in-time*) | — | — | implementado |
+| `providers` | perfil profissional, empresa, portfólio, categorias e zonas de atuação | `users` | — | implementado |
+| `requests` | pedidos, imagens, máquina de estados (§4.3) | `users`, `providers` | `RequestPublished` | implementado |
+| `proposals` | propostas e máquina de estados (§4.4) | `users`, `providers`, `requests` | `ProposalSent`, `ProposalAccepted` | implementado |
+| `bookings` | marcações criadas a partir de proposta aceite (§13) | `users`, `providers`, `requests`, `proposals` | — (`BookingCompleted` previsto) | implementado |
+| `reviews` | avaliações verificadas (só sobre `Booking` `COMPLETED`) | `users`, `bookings` | — (`ReviewSubmitted` previsto) | implementado |
+| `geo` | geocodificação e o fragmento SQL de cobertura partilhado (`CoverageSql`, §10.3) | — | — | implementado |
+| `matching` | predicado de elegibilidade prestador↔pedido (§10.3) | `geo` | — | implementado |
+| `search` | pesquisa de prestadores sobre PostgreSQL FTS (ADR-0005) | `geo` | — | implementado |
+| `billing` | planos e ciclo de vida da subscrição (§12) | — | `SubscriptionActivated`, `SubscriptionPastDue`, `SubscriptionExpired`, `SubscriptionCancelled` | implementado |
+| `payments` | *port* `PaymentGateway`, webhooks idempotentes, reconciliação (ADR-0007) | `billing` | — | implementado |
+| `categories` | catálogo e subcategorias | — | — | **por implementar** (Onda 1b, `backend-domain`) |
+| `chat` | conversas e mensagens (§11.3) | `users`, `requests`, `proposals` (evento) | `MessageSent` (previsto) | **por implementar** (Onda 1b, `backend-domain`) |
+| `uploads` | emissão de URL assinado, validação por *magic bytes*, confirmação de `imageId` (§11.2) | — | — | **por implementar** (Onda 1b, `backend-platform`) |
+| `notifications` | push (FCM/APNs) e email, preferências, `DeviceToken` multi-dispositivo | (subscreve eventos) | — | **por implementar** (Onda 1b, `backend-platform`) |
+
+Fora de `modules/` ficam `pt.servimatch.platform.**` e `pt.servimatch.config.**`
+(erros, idempotência, *rate limiting*, correlação, segurança, registo de
+eventos) — infraestrutura transversal, não domínio. `GET /v1/app/version-status`
+vive em `platform/appversion` e **não** é módulo: as regras são configuração e
+não têm tabela.
+
+**Correspondência com a versão anterior deste documento.** A tabela acima
+substitui uma lista de módulos planeados que nunca chegou a existir com esses
+nomes. Para quem leu a versão anterior:
+
+- `subscriptions` → **`billing`**. Mesmo âmbito (planos + ciclo de vida); o nome
+  mudou para não colidir com o recurso `/v1/subscriptions` da API.
+- `schedule` → **`bookings`**, mas **só a parte de marcações**. *Disponibilidade
+  do prestador* e *lembretes* não existem em módulo nenhum: estão **por
+  implementar** (os lembretes dependem de `notifications`).
+- `common` → **não existe como módulo**. O que lá estava previsto vive em
+  `pt.servimatch.platform.**`, fora da árvore de módulos.
+- `auth` (adapter) → **não existe como módulo**. O mapeamento identidade↔domínio
+  está repartido entre `platform/security` (validação de audiência, conversão de
+  *roles* do Keycloak) e `users` (provisionamento JIT por `keycloak_sub`). Não há
+  evento `UserProvisioned` — nenhum consumidor o pediu.
+- `customers` → **não existe e não foi renomeado**. O perfil de cliente é o
+  próprio `User`; não apareceu atributo que justificasse tabela e módulo
+  próprios. Se aparecer, é módulo novo, não um renomear deste.
+- `admin` → **por implementar**, sem agente atribuído; faseado para depois do MVP
+  (§19.3, fase 5). As capacidades de administração descritas em §4.1 continuam
+  válidas como requisito.
+- Eventos previstos que **não** são publicados hoje: `UserRegistered`,
+  `ProviderActivated`/`ProviderDeactivated`, `RequestConfirmed`/`RequestCancelled`
+  (a confirmação viaja em `ProposalAccepted`), `PaymentSucceeded`/`PaymentFailed`
+  (`payments` atua sobre `billing` por chamada síncrona a `SubscriptionLifecycle`).
+  Não foram removidos do plano — simplesmente ainda não têm consumidor, e um
+  evento sem consumidor é código morto com custo de manutenção.
+
+**Padrão de integração-chave.** `requests` publica `RequestPublished` na mesma
+transação da transição `DRAFT → PUBLISHED`. O consumo assíncrono
+(`@ApplicationModuleListener`, transacional e assíncrono por omissão no Spring
+Modulith) mantém a publicação do pedido rápida e desacoplada, e o *Event
+Publication Registry* garante reentrega após falha.
+
+**Estado real do acoplamento (a corrigir, não a normalizar).** O único *listener*
+em produção é `bookings` sobre `ProposalAccepted`. `matching` expõe o predicado
+como API pública síncrona (`MatchingApi`) e **ainda não tem consumidor nenhum**:
+
+- `search` aplica o filtro geográfico usando diretamente o fragmento
+  `geo.CoverageSql`, não `MatchingApi` — legítimo, é o mesmo fragmento partilhado,
+  mas as regras não-geográficas ficam duplicadas nos dois módulos;
+- `GET /v1/providers/me/requests` (§11.2, "pedidos **elegíveis** recebidos")
+  valida hoje apenas subscrição e aprovação, e devolve a lista de pedidos
+  publicados **sem** aplicar categoria nem cobertura, apesar de existir
+  `MatchingApi.filterEligibleRequestIds` desenhada para o efeito. É uma
+  divergência entre o requisito e a implementação, com impacto de privacidade
+  (§5.7), não uma decisão de arquitetura;
+- o *listener* de `RequestPublished` que seleciona e notifica prestadores
+  elegíveis chega com `notifications`, na Onda 1b — sem canal de notificação não
+  teria efeito observável.
 
 ### 6.4 Consistência transacional
 
 - Escrita e publicação de evento na **mesma transação** local; entrega do evento após *commit*.
 - Para o efeito assíncrono, usar o **Event Publication Registry** do Spring Modulith (tabela de eventos publicados) para garantir *at-least-once* e reentrega após falha/reinício — evita perder notificações de matching.
 - Handlers assíncronos devem ser **idempotentes**.
+
+**Consistência eventual assumida: aceitar proposta → criar `Booking`.**
+`ProposalAccepted` **não transporta `bookingId`**. A `Booking` é criada pelo
+módulo `bookings` a reagir ao evento, não por chamada síncrona a partir de
+`proposals`: essa direção síncrona fecharia um ciclo `proposals ↔ bookings`
+(`bookings` já depende de `proposals` para resolver participantes) e faria falhar
+`ApplicationModules.verify()`. Consequências que os clientes têm de tratar:
+
+- há uma janela — tipicamente de milissegundos, mas sem garantia — entre a
+  proposta ficar `ACCEPTED` e a `Booking` existir; a resposta de
+  `POST /v1/proposals/{id}/accept` não pode prometer o `bookingId`;
+- o consumidor tem de ser idempotente (entrega *at-least-once*); em `bookings`
+  isso é garantido pelo índice único `uq_booking_proposal_id`, não por
+  verificação em memória;
+- `chat` (Onda 1b) cria a `Conversation` a partir do **mesmo** evento e herda a
+  mesma janela — o que reforça a escolha: o custo paga-se uma vez e serve os dois.
 
 ---
 
@@ -290,7 +367,7 @@ Ambos os clientes (web e mobile) são consumidores da **mesma API REST** e auten
 **Contexto:** em julho/2026 coexistem **Spring Boot 3.5.x** (linha madura, ex. 3.5.13) e **Spring Boot 4.1** GA (Spring Framework 7, baseline Java 17+), com **Spring Modulith 2.1** alinhado ao ecossistema mais recente. **Decisão (fechada):** a baseline do projeto é **Spring Boot 3.5.x + Spring Modulith 1.4.x + Java 21 LTS**, fixada no `pom.xml` e não alterável sem ADR substituto. **Racional:** um MVP não deve absorver risco de *early adoption* no framework base; a atualização para 4.x é incremental e fica planeada, com critérios de saída explícitos (compatibilidade verificada dependência a dependência, MVP estabilizado, suíte de integração a cobrir auth/geo/pagamentos, ou aproximação do fim de suporte da linha 3.5.x). **Alternativa rejeitada:** arrancar em Boot 4.1 + Modulith 2.1 — defensável para quem privilegie longevidade sobre previsibilidade de prazo, mas troca risco conhecido por risco de ecossistema durante a construção do produto. Detalhe e critérios em `docs/adr/0003-versao-stack-backend.md`. *(Confirmar a matriz de compatibilidade nas fontes em §21 antes de fixar as versões exatas.)*
 
 ### ADR-04 — Geolocalização e matching com PostGIS
-**Decisão:** modelar zonas de atuação com **PostGIS** (`geography(Point)` + raio, ou regiões administrativas), matching por `ST_DWithin` com índice GiST. **Racional:** matching por proximidade é requisito central; PostGIS é a ferramenta correta e evita reinventar cálculo geoespacial. **Não é overengineering** — é a base natural sobre PostgreSQL. Detalhe em §10.
+**Decisão:** modelar zonas de atuação com **PostGIS** (`geography(Point)` + raio, ou regiões administrativas), matching por `ST_DWithin` com índice GiST — **na forma medida em §10.3**: a escrita ingénua do predicado, com o raio a vir de uma coluna, não ativa o índice. **Racional:** matching por proximidade é requisito central; PostGIS é a ferramenta correta e evita reinventar cálculo geoespacial. **Não é overengineering** — é a base natural sobre PostgreSQL. Detalhe em §10.
 
 ### ADR-05 — Pesquisa: PostgreSQL FTS primeiro
 **Decisão:** *full-text search* nativo do PostgreSQL (`tsvector` + índice GIN, `pg_trgm` para *fuzzy*) no MVP; OpenSearch/Elasticsearch só quando os requisitos de relevância/escala o exigirem. **Racional:** evita operar um segundo *datastore* prematuramente.
@@ -300,6 +377,15 @@ Ambos os clientes (web e mobile) são consumidores da **mesma API REST** e auten
 
 ### ADR-07 — Estratégia de pagamentos multi-gateway
 **Decisão:** abstrair o gateway atrás de uma *port* de domínio (`PaymentGateway`) com implementações plugáveis; **Stripe Billing** como referência para subscrição recorrente com cartão, **Eupago/IfthenPay** para métodos locais (MB WAY, Multibanco). **Racional e risco:** a recorrência automática é trivial com cartão (Stripe); com Multibanco (referências one-shot) a renovação é *invoice-based* (nova referência por ciclo). Ver §12.
+
+### ADR-08 — Aplicação móvel Flutter (app única, *fast-follow*)
+**Decisão:** uma só app Flutter para Cliente e Prestador, iOS + Android, sobre a mesma API REST; a UI adapta-se ao *role*, em *fast-follow* ao web. **Racional:** a diferença Cliente/Prestador é de UX e de *gating*, não de domínio — o ADR rejeita duas apps **no arranque**, o que deixa a separação em aberto se a UX do prestador divergir de forma significativa (gatilho de reavaliação, não decisão tomada). Ver §14.2 e `docs/adr/0008-app-movel-flutter.md`.
+
+### ADR-09 — Autenticação de clientes nativos (RFC 8252 + PKCE)
+**Decisão:** `flutter_appauth` com *external user-agent* (nunca webview embebido) e *secure storage* (Keychain/Keystore). Ver §8.3.1 e `docs/adr/0009-autenticacao-clientes-nativos.md`.
+
+### ADR-10 — Acesso a tabelas de outro módulo
+**Decisão:** leitura SQL entre módulos permitida apenas nos casos enumerados (consultas de conjunto em `matching`, `search`, `billing`), com *javadoc* e teste de integração; escrita proibida sem exceção. **Motivo:** `ApplicationModules.verify()` só vê tipos Java, e o predicado central perderia o índice se passasse por chamadas por prestador. **Custo aceite:** acoplamento ao esquema que o compilador não deteta. Ver §6.1, §6.3, §10.3 e `docs/adr/0010-acesso-sql-entre-modulos.md`.
 
 ---
 
@@ -434,7 +520,7 @@ Moradas → coordenadas via **Nominatim (OpenStreetMap)**. **Risco operacional:*
 
 Dois modos, combináveis:
 
-1. **Raio** — prestador define base (`center`) + `radius_m`. Match: `ST_DWithin(area.center, request.location, area.radius_m)`.
+1. **Raio** — prestador define base (`center`) + `radius_m` (limitado a 100 km por *check constraint*, por razões de índice — §10.3). Match: `ST_DWithin(area.center, request.location, area.radius_m)`, **na forma de §10.3**, não literalmente assim.
 2. **Regiões administrativas** — prestador seleciona concelhos/distritos (`region_code`); o pedido é mapeado à região da sua localização. Match: `request.region_code IN (áreas do prestador)`.
 
 **Recomendação:** suportar ambos; **raio** dá melhor experiência (proximidade real) e **regiões** são mais intuitivas de configurar e independentes de geocoding preciso. No MVP, começar por **regiões administrativas** (determinístico, sem dependência forte de geocoding) e ativar **raio** assim que o geocoding self-hosted estiver estável.
@@ -444,19 +530,56 @@ Dois modos, combináveis:
 Ao receber `RequestPublished`:
 
 ```sql
--- pseudo-SQL do predicado central
+-- forma real do predicado central (pt.servimatch.modules.geo.CoverageSql
+-- + matching/internal/EligibilityRepository)
+WITH candidates AS MATERIALIZED (          -- (2) não é opcional
+    SELECT provider_id
+    FROM provider_service_area
+    WHERE (
+            mode = 'RADIUS'
+            AND ST_DWithin(center, :point, :maxRadiusM)   -- (1) pré-filtro constante
+            AND ST_DWithin(center, :point, radius_m)      --     correção exata
+          )
+       OR (mode = 'ADMIN_REGION' AND region_code = :requestRegion)
+)
 SELECT p.id
-FROM provider_profile p
-JOIN subscription s ON s.provider_id = p.id AND s.status = 'ACTIVE'
-JOIN provider_category pc ON pc.provider_id = p.id AND pc.category_id = :category
-JOIN provider_service_area a ON a.provider_id = p.id
+FROM candidates c
+JOIN provider_profile p ON p.id = c.provider_id
 WHERE p.approval_status = 'APPROVED'
   AND p.visibility_state = 'VISIBLE'
-  AND (
-        (a.mode = 'RADIUS' AND ST_DWithin(a.center, :requestPoint, a.radius_m))
-     OR (a.mode = 'ADMIN_REGION' AND a.region_code = :requestRegion)
-  );
+  AND EXISTS (SELECT 1 FROM subscription s
+              WHERE s.provider_id = p.id AND s.status = 'ACTIVE')
+  AND EXISTS (SELECT 1 FROM provider_category pc
+              WHERE pc.provider_id = p.id AND pc.category_id = :category);
 ```
+
+**Não simplificar esta consulta sem `EXPLAIN`.** A forma ingénua — um único
+`ST_DWithin(center, :point, radius_m)` com o raio a vir da coluna — está
+sintaticamente certa e **não usa o índice GiST**. Dois mecanismos independentes,
+ambos medidos sobre 20 000 prestadores, sustentam a forma acima:
+
+1. **Pré-filtro com raio constante.** `ST_DWithin` só ativa o índice quando o
+   reescritor consegue construir a caixa de pesquisa `center && _st_expand(:point, d)`
+   — o que exige `d` conhecido **no momento do planeamento**. Com o raio numa
+   coluna, que varia por linha, isso é impossível: o plano mostra a condição
+   apenas como `Filter`, nunca como `Index Cond` (~6700 buffers, sem poda
+   espacial). Acrescentar um `ST_DWithin` redundante com um limite **constante**
+   (`MAX_RADIUS_METERS` = 100 km) devolve o `Index Cond` (~2500 buffers, mesmo
+   resultado). O limite é um pressuposto de correção — um prestador com raio
+   maior seria excluído — e por isso está garantido pelo esquema:
+   `CHECK (radius_m <= 100000)` em `provider_service_area` (migração V16).
+2. **`MATERIALIZED` na CTE.** Sem o qualificador, o PostgreSQL pode embutir a CTE
+   e reavaliar a condição geográfica **por linha externa**: `loops=17066` em vez
+   de `loops=1` no nó de `provider_service_area`. O pré-filtro dá ao planeador
+   uma estimativa de cardinalidade utilizável; o `MATERIALIZED` impede que essa
+   estimativa seja desperdiçada por reavaliação repetida.
+
+O teste de regressão verifica os **dois sinais separadamente por `EXPLAIN`**
+(`Index Cond` com `_st_expand`, e `CTE Scan on candidates`), não por tempo de
+execução — que varia com a máquina e não distingue as duas causas. A
+documentação do PostGIS afirma que `ST_DWithin` "includes a bounding box
+comparison that makes use of any indexes available", mas **não** cobre o caso do
+raio por coluna; a afirmação (1) é empírica, deste repositório.
 
 Ordenação para notificação/recomendação: `ranking_boost` do plano (Premium primeiro) → `rating_avg` → proximidade → aleatoriedade controlada (evita favorecer sempre os mesmos). Resultado alimenta `notifications` e a listagem de recomendação.
 
@@ -491,6 +614,20 @@ Ordenação para notificação/recomendação: `ranking_boost` do plano (Premium
 | POST | `/v1/uploads` | autenticado | Emitir URL pré-assinado + `imageId` |
 
 **Uploads.** O ficheiro **nunca atravessa o backend**: `POST /v1/uploads` devolve um URL pré-assinado de utilização única e o `imageId` a referenciar depois em `imageIds`/`attachmentIds`. O `contentType` e o `contentLength` declarados fazem parte da assinatura — divergir invalida o `PUT`. A chave de armazenamento é gerada pelo servidor (o `fileName` do cliente é informativo, para impedir *path traversal*), e a verificação por *magic bytes* (§8.6) ocorre quando o `imageId` é associado a um recurso, o que dispensa um endpoint `/complete`. Um `imageId` nunca referenciado expira e é recolhido. Contrato completo em `docs/api/openapi.yaml` (`createUpload`).
+
+**Lacunas conhecidas do contrato v1.0.0.** Construir o site expôs nove
+capacidades que a UI precisa e que o contrato **ainda não expõe**: perfil público
+completo do prestador (`GET /v1/providers/{id}`), lista de conversas
+(`GET /v1/conversations`), subscrição atual (`GET /v1/subscriptions/me`), perfil
+editável do prestador (`GET`/`PUT /v1/providers/me`), detalhe de `Booking`
+(`GET /v1/bookings/{id}`), "os meus pedidos" (`GET /v1/requests` filtrado por
+dono), "as minhas propostas", avaliações por prestador
+(`GET /v1/reviews?targetId=`) e agregados do *dashboard* do prestador. Detalhe e
+impacto em `web/site/README.md` § "O que falta ligar ao backend real"; em modo
+HTTP real o site devolve `501` explícito em vez de inventar campos. **Isto é
+entrada para o `api-contract`, não trabalho de frontend** — todas são adições, e
+por isso compatíveis com a regra de evolução aditiva (§11.4, ADR-0008). Nada
+disto está decidido de forma diferente: está por especificar.
 
 ### 11.3 Real-time (chat)
 
@@ -549,7 +686,7 @@ O campo **`visibility_state`** do prestador é **derivado** de `Subscription.sta
 ## 13. Chat, Agenda e Notificações
 
 - **Chat:** §11.3. Anexos (fotos/documentos) via *object store* com URLs assinadas; validação de uploads (§8.6).
-- **Agenda/`Booking`:** disponibilidade do prestador, marcação a partir de proposta aceite, lembretes. Estados: `CONFIRMED → IN_PROGRESS → COMPLETED` (ou `CANCELLED`/`NO_SHOW`). `BookingCompleted` habilita avaliação.
+- **Agenda/`Booking`:** marcação a partir de proposta aceite (§6.4), com estados `CONFIRMED → IN_PROGRESS → COMPLETED` (ou `CANCELLED`/`NO_SHOW`); a conclusão habilita a avaliação. **Por implementar:** *disponibilidade* do prestador (calendário) e *lembretes* — os lembretes dependem de `notifications` e da publicação de `BookingCompleted`, que hoje não existe.
 - **Notificações:** camada única que **subscreve eventos de domínio** e decide canal por preferências do utilizador — **FCM** (push, entregue a Android e iOS/APNs e web) e **email** (Spring Mail). Envia para todos os `DeviceToken` ativos do utilizador (multi-dispositivo); fila com *retry* e *fallback* push→email; *tokens* inválidos são removidos.
 
 ---
@@ -610,8 +747,13 @@ Web: Vercel. Mobile: **App Store** (iOS) e **Google Play** (Android), com pipeli
 
 ### 15.1 Frontend (feature-based)
 
+`web/` é um *workspace* com duas aplicações: **`web/site/`** (SPA React, a árvore
+abaixo) e **`web/bff/`** (o *backend-for-frontend* que detém o cookie de sessão,
+§8.3). As *features* implementadas hoje são `auth`, `categories`, `providers`,
+`requests`, `proposals` e `subscriptions`; as restantes da árvore são o alvo.
+
 ```
-src/
+site/src/
 ├── app/            # bootstrap, providers, config
 ├── assets/
 ├── components/     # UI partilhada (shadcn/ui)
@@ -640,25 +782,50 @@ src/
 ### 15.2 Backend (por módulo)
 
 ```
-com.servimatch
-├── common
-├── auth          # adapter Keycloak ↔ domínio
-├── users
-├── customers
-├── providers
-├── categories
-├── requests
-├── proposals
-├── subscriptions
-├── payments
-├── chat
-├── schedule
-├── reviews
-├── notifications
-└── admin
+pt.servimatch
+├── ServiMatchApplication
+├── config/                 # SecurityConfig, EventsConfig, IdempotencyConfig, RateLimitConfig
+├── platform/               # infraestrutura transversal (não é módulo de domínio)
+│   ├── error/              # RFC 9457 Problem Details
+│   ├── security/           # audiência, roles Keycloak, entry points
+│   ├── idempotency/        # Idempotency-Key (memória ou Redis)
+│   ├── ratelimit/          # Bucket4j (memória ou Redis)
+│   ├── observability/      # correlation_id
+│   ├── events/             # housekeeping do Event Publication Registry
+│   └── appversion/         # GET /v1/app/version-status (por implementar)
+└── modules/
+    ├── users/  providers/  requests/  proposals/  bookings/  reviews/
+    ├── geo/  matching/  search/
+    ├── billing/  payments/
+    └── categories/  chat/  uploads/  notifications/   # por implementar (Onda 1b)
 ```
 
-Cada módulo mantém estrutura uniforme: `controller`, `service`, `repository`, `entity`, `dto`, `mapper`, `validator`, `config`, `events` (eventos publicados/escutados). Tipos de integração inter-módulo ficam **públicos**; o resto **package-private** para que o Spring Modulith verifique as fronteiras.
+O pacote de base é **`pt.servimatch`** (não `com.servimatch`) e os módulos vivem
+sob `modules/`, não à raiz. A correspondência com os nomes da versão anterior
+desta lista está em §6.3.
+
+Cada módulo segue a mesma forma:
+
+```
+modules/<nome>/
+├── package-info.java       # @ApplicationModule — propriedade do backend-platform
+├── <Nome>Api.java          # API pública mínima (interface) + enums e eventos partilhados
+├── <Evento>.java           # eventos de domínio: no pacote de topo, não em events/
+├── web/                    # controladores e DTO expostos, quando os há
+└── internal/               # serviço, repositório, linhas de tabela — package-private
+```
+
+**Eventos no pacote de topo, não em `events/`.** O Spring Modulith expõe por
+omissão apenas o pacote de topo de um módulo como API pública; um subpacote
+`events` exigiria `@NamedInterface` num `package-info.java` próprio. Só o
+`backend-platform` escreve `package-info.java` (§6.3), pelo que a convenção
+barata é a que está: `RequestPublished` e `ProposalAccepted` ao lado do `Api`.
+`billing` usa hoje um subpacote `events/` — divergência conhecida, sem
+consumidor externo até agora; uniformizar quando `notifications` os subscrever.
+
+Tipos de integração inter-módulo ficam **públicos**; o resto **package-private**,
+para que `ApplicationModules.verify()` tenha o que verificar. Note-se o que essa
+verificação **não** cobre: dependências por SQL entre módulos — ver ADR-0010.
 
 ### 15.3 Mobile (Flutter, feature-first)
 
