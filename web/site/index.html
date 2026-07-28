@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-PT">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#050c1c" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="canonical" href="https://www.servimatch.pt/" />
+
+    <!-- Google Fonts: preconnect + display=swap (§5.2 da direção de arte) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Instrument+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap"
+    />
+
+    <title>ServiMatch — Encontre profissionais de confiança perto de si</title>
+    <meta
+      name="description"
+      content="Descreva o problema, receba orçamentos de profissionais verificados da sua zona. Canalização, eletricidade, limpeza, pintura e muito mais — grátis para clientes."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="ServiMatch — Encontre profissionais de confiança perto de si" />
+    <meta
+      property="og:description"
+      content="Descreva o problema, receba orçamentos de profissionais verificados da sua zona."
+    />
+    <meta property="og:locale" content="pt_PT" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <script>
+      // Aplica o tema antes da hidratação — evita o "flash" de tema errado.
+      // Dark é o default (§6): só troca para light se a preferência
+      // explícita gravada em localStorage for "light", ou, na ausência de
+      // preferência gravada, se o sistema pedir claro via matchMedia.
+      // `localStorage` é usado aqui apenas para a preferência de tema — é a
+      // única exceção admitida a "nunca localStorage" (nunca para tokens).
+      (function () {
+        try {
+          var stored = localStorage.getItem('sm-theme');
+          var theme = stored === 'light' || stored === 'dark' ? stored : null;
+          if (!theme) {
+            theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+          }
+          document.documentElement.classList.toggle('light', theme === 'light');
+          document.documentElement.style.colorScheme = theme;
+        } catch (e) {
+          document.documentElement.style.colorScheme = 'dark';
+        }
+      })();
+    </script>
+  </head>
+  <body class="font-sans">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -65,11 +65,15 @@ export default defineConfig({
     {
       command: 'npx vite --port 5175 --strictPort',
       url: APP_ORIGIN,
-      cwd: '../app',
+      cwd: '../site',
       reuseExistingServer: !process.env.CI,
       stdout: 'pipe',
       env: {
         VITE_BFF_ORIGIN: BFF_ORIGIN,
+        // Crítico: sem isto o site arrancaria em modo mock (default em dev)
+        // e este E2E deixaria de testar o Authorization Code + PKCE real
+        // contra o BFF — é precisamente o que este teste existe para provar.
+        VITE_USE_MOCKS: 'false',
       },
     },
   ],

@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /painel
+Disallow: /pedidos
+Disallow: /conversas
+Disallow: /avaliacoes
+Disallow: /pro
+Disallow: /entrar
+
+Sitemap: https://www.servimatch.pt/sitemap.xml
