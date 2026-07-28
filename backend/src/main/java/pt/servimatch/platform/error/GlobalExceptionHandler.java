@@ -155,6 +155,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             case NOT_FOUND -> ProblemType.NOT_FOUND;
             case CONFLICT -> ProblemType.CONFLICT;
             case TOO_MANY_REQUESTS -> ProblemType.RATE_LIMITED;
+            case PAYLOAD_TOO_LARGE -> ProblemType.PAYLOAD_TOO_LARGE;
+            case UNSUPPORTED_MEDIA_TYPE -> ProblemType.UNSUPPORTED_MEDIA_TYPE;
             default -> status.is5xxServerError() ? ProblemType.INTERNAL : ProblemType.VALIDATION;
         };
     }

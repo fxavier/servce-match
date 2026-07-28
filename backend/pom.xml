@@ -44,6 +44,14 @@
     <!-- Bucket4j (rate limiting, ADR-0006). Artefactos "_jdk17" são a linha
          ativamente publicada, compatível com Java 17+ (usamos Java 21). -->
     <bucket4j.version>8.19.0</bucket4j.version>
+
+    <!-- AWS SDK v2 (client S3, ARQUITETURA §14: "Object store: Amazon S3 /
+         Cloudflare R2 (produção), MinIO (desenvolvimento) — API compatível
+         com S3"). Usado só por modules/uploads para emitir URLs
+         pré-assinados e ler magic bytes na confirmação; nenhum outro módulo
+         deve depender diretamente do SDK — passa pela API pública do
+         módulo. -->
+    <aws-sdk.version>2.31.45</aws-sdk.version>
   </properties>
 
   <dependencyManagement>
@@ -52,6 +60,13 @@
         <groupId>org.springframework.modulith</groupId>
         <artifactId>spring-modulith-bom</artifactId>
         <version>${spring-modulith.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>software.amazon.awssdk</groupId>
+        <artifactId>bom</artifactId>
+        <version>${aws-sdk.version}</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -146,6 +161,28 @@
       <artifactId>caffeine</artifactId>
     </dependency>
 
+    <!-- ==================== Object storage (modules/uploads) ==================== -->
+    <!-- URLs pré-assinados (S3Presigner) e leitura de magic bytes na
+         confirmação. API compatível S3 — MinIO em desenvolvimento
+         (infra/docker-compose.yml), S3/R2 em produção. -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>s3</artifactId>
+      <!-- Só usamos o cliente síncrono (apache-client, abaixo); o cliente
+           Netty transitivo não é necessário e traz uma versão de
+           io.netty:netty-codec-http* não presente no cache offline. -->
+      <exclusions>
+        <exclusion>
+          <groupId>software.amazon.awssdk</groupId>
+          <artifactId>netty-nio-client</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>apache-client</artifactId>
+    </dependency>
+
     <!-- ==================== Observabilidade ==================== -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -204,6 +241,41 @@
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+      <!--
+        Convenção de nomenclatura de testes deste projeto: TUDO é *Test.java
+        (Surefire, fase "test"), incluindo testes de integração pesados com
+        Testcontainers (ex. PaymentsApiIntegrationTest,
+        TestcontainersPostgisMigrationTest) — não há uma fase "integration
+        separada de "unit" neste build. Um agente já escreveu um *IT.java à
+        espera da convenção Maven Failsafe padrão, viu-o passar com
+        `-Dtest=`, e só descobriu em `mvn verify` completo que nunca corria
+        (Surefire, por omissão, não apanha `*IT.java`) — ver relatório de
+        entrega do agente backend-platform, onda "uploads".
+
+        Em vez de só documentar a convenção (fácil de voltar a ignorar),
+        este plugin torna-a estruturalmente impossível de contornar
+        silenciosamente: qualquer `*IT.java`/`*ITCase.java`/`IT*.java`
+        escrito por engano passa a correr mesmo assim, na fase
+        "integration-test" deste `mvn verify` — nunca fica invisível.
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <!-- Spring Boot 3.5.16 (parent) não gere a versão deste plugin
+             (só o de Surefire); fixada explicitamente ao par
+             plugin/provider (org.apache.maven.surefire:surefire-junit-platform)
+             disponível no cache local — 3.5.4 resolve o plugin mas não o
+             provider correspondente em modo offline. -->
+        <version>3.5.3</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>
