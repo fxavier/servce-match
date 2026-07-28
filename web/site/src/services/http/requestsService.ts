@@ -1,0 +1,35 @@
+import { throwProblem } from '../../lib/problem';
+import { api } from '../http';
+import type { RequestsService } from '../interfaces';
+import { notImplementedInContract } from './notImplemented';
+
+export const requestsServiceHttp: RequestsService = {
+  listMine() {
+    // Gap #6 — sem GET /v1/requests (lista dos pedidos do cliente autenticado).
+    return notImplementedInContract('lista dos meus pedidos');
+  },
+  async get(id) {
+    const { data, error } = await api.GET('/v1/requests/{requestId}', { params: { path: { requestId: id } } });
+    if (error) throwProblem(error);
+    return data;
+  },
+  async create(body) {
+    const { data, error } = await api.POST('/v1/requests', { body });
+    if (error) throwProblem(error);
+    return data;
+  },
+  async publish(id) {
+    const { data, error } = await api.POST('/v1/requests/{requestId}/publish', {
+      params: { path: { requestId: id } },
+    });
+    if (error) throwProblem(error);
+    return data;
+  },
+  async listProviderInbox(params) {
+    const { data, error } = await api.GET('/v1/providers/me/requests', {
+      params: { query: { status: params?.status, limit: params?.limit, cursor: params?.cursor } },
+    });
+    if (error) throwProblem(error);
+    return data;
+  },
+};

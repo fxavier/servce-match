@@ -1,0 +1,150 @@
+@import './theme.css';
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+  }
+
+  /* Anel de foco visível em todos os interativos, nos dois temas (§5.3). */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  ::selection {
+    background-color: var(--color-orange-500);
+    color: var(--color-accent-fg);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--color-line);
+    border-radius: var(--radius-full);
+  }
+
+  * {
+    scrollbar-color: var(--color-line) transparent;
+    scrollbar-width: thin;
+  }
+
+  /* font-variant-numeric tabular para preços (§5.2). */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  .text-gradient-energy {
+    background-image: linear-gradient(90deg, var(--color-orange-600), var(--color-orange-400));
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+  }
+
+  .surface-card {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    transition:
+      transform var(--duration-transition) var(--ease-out),
+      box-shadow var(--duration-transition) var(--ease-out),
+      border-color var(--duration-transition) var(--ease-out);
+  }
+
+  .surface-card--interactive:hover {
+    transform: translateY(-4px);
+    border-color: color-mix(in srgb, var(--color-orange-500) 40%, transparent);
+    box-shadow: var(--shadow-card-hover);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .surface-card--interactive:hover {
+      transform: none;
+    }
+  }
+
+  .hairline {
+    border-top: 1px solid var(--color-line);
+  }
+
+  .glow-accent {
+    box-shadow: 0 0 80px -20px var(--color-orange-500);
+  }
+
+  .glow-signal {
+    box-shadow: 0 0 80px -20px var(--color-signal-500);
+  }
+
+  /* Grão de filme: feTurbulence em overlay, opacidade baixa, sem eventos de
+     ponteiro — parte da "profundidade em camadas" (§6). Aplicar em
+     containers com `position: relative; overflow: hidden`. */
+  .grain::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.04;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* Eyebrow tipográfico — Plex Mono, maiúsculas, tracking largo (§5.2). */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: var(--text-eyebrow);
+    font-weight: 500;
+    letter-spacing: var(--text-eyebrow--letter-spacing);
+    text-transform: uppercase;
+  }
+
+  .skip-link {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    z-index: 100;
+    background: var(--color-accent);
+    color: var(--color-accent-fg);
+    padding: 0.75rem 1.25rem;
+    border-radius: var(--radius-md);
+  }
+
+  .skip-link:focus {
+    left: 1rem;
+    top: 1rem;
+  }
+}
