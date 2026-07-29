@@ -57,6 +57,7 @@ Um caminho tem **um único agente com direito de escrita**. Os restantes podem l
 | `backend/**/modules/{matching,geo,search}/**` — exceto `package-info.java` | `backend-matching` |
 | `backend/**/modules/{billing,payments}/**` — exceto `package-info.java` | `backend-payments` |
 | `backend/src/main/resources/db/migration/**` | `db-migrations` |
+| `backend/src/main/resources/db/seed/**` (dados de demonstração dev-only, ADR-0013) | `db-migrations` |
 | `backend/src/test/**` (testes de integração transversais) | `qa-e2e` |
 | `web/**` | `web-frontend` |
 | `mobile/**` | `mobile-flutter` |
@@ -91,13 +92,40 @@ dependência de módulo nova, pedes, com motivo. É o que impede que
 
 ## 4. Invariantes de segurança (não negociáveis)
 
-Derivam dos ADR 0002 e 0009. Qualquer PR que os viole é rejeitado, sem exceção.
+Derivam dos ADR 0002, 0009, 0011, 0012 e 0013. Qualquer PR que os viole é
+rejeitado, sem exceção.
 
 - O backend é **apenas OAuth2 Resource Server**. Não emite tokens, não faz hash
-  de passwords, não gere refresh tokens. O IdP é o Keycloak.
-- **Nunca** guardar tokens em `localStorage`/`sessionStorage`. Web: padrão BFF com
-  cookie `HttpOnly`/`Secure`/`SameSite`. Mobile: RFC 8252 + Keychain/Keystore.
-- **Nunca** usar webview embebido para autenticação em mobile (RFC 8252).
+  de passwords, não gere refresh tokens. O IdP é o Keycloak. O ADR-0012 **não
+  flexibiliza isto**: muda quem *recolhe* as credenciais no web (formulário da
+  SPA → BFF → Keycloak, *server-to-server*), nunca quem as valida. Nenhuma
+  dependência de administração de IdP entra no `backend/pom.xml`; nenhum endpoint
+  `/v1/**` recebe uma password.
+- **Nunca** guardar tokens em `localStorage`/`sessionStorage`, e **nenhuma
+  resposta do BFF ao browser contém `access_token` ou `refresh_token`** — nem no
+  corpo da resposta de login. Web: padrão BFF com cookie `HttpOnly`/`Secure`/
+  `SameSite`. Mobile: RFC 8252 + Keychain/Keystore.
+- **Nunca** usar webview embebido para autenticação em mobile (RFC 8252). O
+  mobile **não** usa o fluxo do ADR-0012: é um cliente público, não pode guardar
+  um secret, e `directAccessGrantsEnabled` fica `false` em
+  `servimatch-mobile` e `servimatch-web`.
+- **A password do utilizador vive num único pedido** (ADR-0012 D3): recolhida
+  pelo BFF, enviada ao Keycloak, descartada. Nunca em log, métrica, sessão,
+  cookie, corpo de erro, nem reencaminhada ao backend.
+- **`POST /auth/register` nunca reencaminha o `role` tal como chega**: *allowlist*
+  `{CUSTOMER, PROVIDER}` no servidor. `ADMIN` não é atribuível por registo.
+- **Respostas de autenticação não permitem enumerar utilizadores**: mesmo código,
+  mesmo corpo e mesmo tempo de resposta para email inexistente e para password
+  errada — e para registo com email já existente. O aviso ao titular vai por
+  email, nunca na resposta HTTP.
+- **Rate limiting de `/auth/**` por IP real, no BFF, antes de contactar o
+  Keycloak.** O Keycloak passa a ver apenas o IP do BFF. `X-Forwarded-For` só é
+  honrado a partir de proxies explicitamente confiáveis — mesma regra do
+  `servimatch.rate-limit.trusted-proxies` no backend (lista de CIDR, vazia por
+  omissão); `app.set('trust proxy', true)` no Express é **proibido**.
+- **O client secret e o *service account* do BFF são material crítico**: fora do
+  repositório (só `.env.example`), rotação definida, nunca `realm-admin`. O
+  secret do realm de desenvolvimento é dev-only e não se reutiliza em lado nenhum.
 - O *gating* por subscrição é uma **regra de domínio no servidor**. Um cliente
   nunca é autoridade sobre o seu plano; a UI só espelha o que o servidor decide.
 - **A elegibilidade resolve-se na leitura, nunca a partir de estado projetado**
@@ -111,6 +139,11 @@ Derivam dos ADR 0002 e 0009. Qualquer PR que os viole é rejeitado, sem exceçã
   evento não verificado.
 - Uploads: validar por *magic bytes*, nunca por extensão; servir por URL assinado
   com expiração.
+- **Dados de demonstração nunca chegam a produção** (ADR-0013). Vivem em
+  `db/seed/**`, **fora do artefacto de produção**, e o arranque **aborta** se as
+  *locations* efetivas do Flyway incluírem `db/seed` sem `local`/`dev` ativo.
+  Configuração sozinha não é barreira: `SPRING_FLYWAY_LOCATIONS` no ambiente
+  sobrepõe-se a qualquer `application*.yml`. Nenhum teste pode ler `db/seed`.
 - Segredos não entram no repositório. `.env.example` sim, `.env` não.
 - PII em logs: proibida. Correlacionar por `correlation_id`, não por email.
 

@@ -5,16 +5,18 @@ Registo de decisões arquiteturais no formato [MADR](https://adr.github.io/madr/
 | ADR | Título | Estado |
 |---|---|---|
 | [ADR-0001](0001-modular-monolith-spring-modulith.md) | Modular Monolith com Spring Modulith | Aceite |
-| [ADR-0002](0002-identidade-keycloak-oauth2-oidc.md) | Identidade delegada a Keycloak (OAuth2/OIDC) | Aceite |
+| [ADR-0002](0002-identidade-keycloak-oauth2-oidc.md) | Identidade delegada a Keycloak (OAuth2/OIDC) | Aceite — parcialmente substituído por [ADR-0012](0012-autenticacao-first-party-sobre-keycloak.md) (só na recolha de credenciais no cliente web) |
 | [ADR-0003](0003-versao-stack-backend.md) | Versão do stack backend (Spring Boot 3.5 vs 4.x) | Aceite |
 | [ADR-0004](0004-geolocalizacao-matching-postgis.md) | Geolocalização e matching com PostGIS | Aceite |
 | [ADR-0005](0005-pesquisa-postgresql-fts.md) | Pesquisa com PostgreSQL Full-Text Search primeiro | Aceite |
 | [ADR-0006](0006-redis-condicional.md) | Redis condicional (single vs multi-instância) | Aceite |
 | [ADR-0007](0007-pagamentos-multi-gateway.md) | Estratégia de pagamentos multi-gateway | Aceite |
 | [ADR-0008](0008-app-movel-flutter.md) | Aplicação móvel Flutter (multi-cliente, app única, fast-follow) | Aceite |
-| [ADR-0009](0009-autenticacao-clientes-nativos.md) | Autenticação de clientes nativos (RFC 8252 / AppAuth + PKCE) | Aceite |
+| [ADR-0009](0009-autenticacao-clientes-nativos.md) | Autenticação de clientes nativos (RFC 8252 / AppAuth + PKCE) | Aceite — parcialmente substituído por [ADR-0012](0012-autenticacao-first-party-sobre-keycloak.md) (delimita o âmbito ao mobile; o mobile mantém-se inalterado) |
 | [ADR-0010](0010-acesso-sql-entre-modulos.md) | Acesso a tabelas de outro módulo: leitura sob condições, escrita proibida | Aceite |
 | [ADR-0011](0011-elegibilidade-do-prestador-resolvida-na-leitura.md) | Elegibilidade do prestador resolvida na leitura, sem projeção desnormalizada | Aceite |
+| [ADR-0012](0012-autenticacao-first-party-sobre-keycloak.md) | Autenticação por credenciais *first-party* sobre o Keycloak | Aceite |
+| [ADR-0013](0013-seed-de-demonstracao-dev-only.md) | Dados de demonstração como *seed* dev-only, fora das migrações versionadas | Aceite |
 
 ## Estados possíveis
 
@@ -22,3 +24,17 @@ Registo de decisões arquiteturais no formato [MADR](https://adr.github.io/madr/
 - **Aceite** — decisão em vigor.
 - **Substituído** — substituído por um ADR posterior (indicar qual).
 - **Descontinuado** — já não aplicável.
+
+## Decisões com gatilho de reavaliação
+
+Estas continuam em vigor, mas têm condições escritas que obrigam a **um ADR novo
+que as substitua** (nunca a uma edição do original):
+
+- **ADR-0003** — baseline Spring Boot 3.5.x + Modulith 1.4.x + Java 21 LTS. Os
+  critérios de migração para Boot 4.x estão no próprio ADR.
+- **ADR-0008** — app única cliente/prestador, marcada como reversível; reavaliar
+  se a UX do prestador divergir de forma significativa.
+- **ADR-0012** — o *grant* usado não é especificado pelo OAuth 2.1 e é proibido
+  pela RFC 9700 §2.4. Substituição obrigatória assim que houver MFA, verificação
+  de email como *required action* do IdP, login social/federação, termos com
+  aceitação registada no IdP, ou um cliente que não seja *first-party*.
