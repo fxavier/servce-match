@@ -1,6 +1,7 @@
 package pt.servimatch.modules.providers;
 
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -34,6 +35,16 @@ public interface ProvidersApi {
     Optional<ProviderEligibility> checkEligibility(UUID providerId);
 
     Optional<ProviderSummaryView> summary(UUID providerId);
+
+    /**
+     * Categorias que o prestador trabalha ({@code provider_category}, V4).
+     * Usado por {@code requests.listProviderInbox} para restringir os
+     * candidatos passados a {@code MatchingApi.filterEligibleRequestIds}
+     * (que só filtra por cobertura geográfica — a categoria tem de ser
+     * pré-filtrada pelo chamador, ver o seu javadoc). Conjunto vazio se o
+     * prestador não existir ou não tiver nenhuma categoria associada.
+     */
+    Set<UUID> workedCategoryIds(UUID providerId);
 
     record ProviderEligibility(UUID providerId, boolean approved, boolean visible) {
         public boolean isEligible() {

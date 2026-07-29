@@ -119,15 +119,26 @@ class RequestRepository {
         return rows > 0;
     }
 
-    /** Página ordenada por {@code created_at DESC, id DESC} (listProviderInbox). */
-    java.util.List<ServiceRequestRow> findPage(java.util.List<String> statuses, CursorCodec.Position after, int limit) {
-        StringBuilder sql = new StringBuilder(SELECT_COLUMNS).append(" WHERE status IN (:statuses) ");
+    /**
+     * Página ordenada por {@code created_at DESC, id DESC} (listProviderInbox).
+     * {@code categoryIds} restringe aos pedidos das categorias trabalhadas
+     * pelo prestador (pré-filtro exigido por
+     * {@code MatchingApi#filterEligibleRequestIds}, que só cobre geografia —
+     * ver {@code RequestsService.listInbox}). Nunca chamado com
+     * {@code categoryIds} vazio: o chamador devolve a página vazia sem
+     * consultar a base de dados nesse caso.
+     */
+    java.util.List<ServiceRequestRow> findPage(java.util.List<String> statuses, java.util.List<UUID> categoryIds,
+                                                CursorCodec.Position after, int limit) {
+        StringBuilder sql = new StringBuilder(SELECT_COLUMNS)
+                .append(" WHERE status IN (:statuses) AND category_id IN (:categoryIds) ");
         if (after != null) {
             sql.append(" AND (created_at, id) < (:afterCreatedAt, :afterId) ");
         }
         sql.append(" ORDER BY created_at DESC, id DESC LIMIT :limit ");
         JdbcClient.StatementSpec spec = jdbcClient.sql(sql.toString())
                 .param("statuses", statuses)
+                .param("categoryIds", categoryIds)
                 .param("limit", limit);
         if (after != null) {
             spec = spec.param("afterCreatedAt", java.sql.Timestamp.from(after.createdAt()))

@@ -70,7 +70,10 @@ class RequestsController {
         UUID viewerId = usersApi.ensureProvisioned(jwt(authentication));
         boolean isAdmin = hasRole(authentication, "ADMIN");
         boolean isProvider = hasRole(authentication, "PROVIDER");
-        return requestsService.getForViewer(requestId, viewerId, isProvider, isAdmin);
+        // findProviderIdByUserId (não ensureProvisioned): uma vista não deve
+        // criar um perfil de prestador para quem só está a ver o pedido.
+        UUID providerId = isProvider ? providersApi.findProviderIdByUserId(viewerId).orElse(null) : null;
+        return requestsService.getForViewer(requestId, viewerId, providerId, isAdmin);
     }
 
     @PostMapping("/v1/requests/{requestId}/publish")
@@ -92,7 +95,7 @@ class RequestsController {
         if (!eligibility.isEligible()) {
             throw Problems.forbidden("Subscrição inativa ou perfil de prestador não aprovado.");
         }
-        return requestsService.listInbox(status, cursor, Math.min(Math.max(limit, 1), 100));
+        return requestsService.listInbox(providerId, status, cursor, Math.min(Math.max(limit, 1), 100));
     }
 
     private static Jwt jwt(Authentication authentication) {

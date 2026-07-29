@@ -8,18 +8,16 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Confirma {@code upload_asset} (V6) e cria o vínculo {@code request_image}
- * quando um {@code imageId} é referenciado em {@code CreateServiceRequest}.
+ * Vínculo {@code request_image} (V7) entre um pedido e os {@code imageId}
+ * (já confirmados via {@code UploadsApi.confirmOwnedUpload} pelo chamador,
+ * {@link RequestsService#createDraft}) que o cliente referenciou em
+ * {@code CreateServiceRequest}.
  *
- * <p><b>Compromisso deliberado e temporário</b> (mesma natureza que
- * {@link CategoryLookup}): não existe ainda um módulo/API pública
- * {@code uploads} (é do {@code backend-platform}, fora do âmbito deste
- * agente) que exponha "confirmar imageId". Este ficheiro faz a leitura e
- * escrita mínimas necessárias — existência, dono, {@code purpose} — e
- * marca {@code CONFIRMED}; a verificação por <em>magic bytes</em>
- * (CLAUDE.md §4) continua a não ser feita aqui e tem de ficar no módulo
- * {@code uploads} quando existir (ver relatório de entrega, pedido
- * explícito ao {@code backend-platform}).
+ * <p>Só guarda o par {@code (request_id, image_asset_id, position)} — nunca
+ * {@code object_key} nem qualquer outro dado de {@code upload_asset}, tabela
+ * que este módulo já não lê nem escreve (ADR-0010, fechado nesta onda: ver
+ * relatório de entrega). A resolução para URLs de leitura assinadas é feita
+ * por {@code UploadsApi#resolve} em {@link RequestsService#toDto}.
  *
  * <p>{@code @Lazy}: ver nota equivalente em
  * {@code pt.servimatch.modules.users.internal.UserRepository}.
@@ -32,21 +30,6 @@ class UploadAssetLinker {
 
     UploadAssetLinker(JdbcClient jdbcClient) {
         this.jdbcClient = jdbcClient;
-    }
-
-    /** @return true se o asset existe, pertence a {@code ownerUserId} e tem o purpose esperado. */
-    boolean confirmOwnedPending(UUID imageId, UUID ownerUserId, String expectedPurpose) {
-        int rows = jdbcClient.sql("""
-                        UPDATE upload_asset
-                        SET status = 'CONFIRMED', confirmed_at = now()
-                        WHERE id = :id AND owner_user_id = :ownerId AND purpose = :purpose
-                          AND status IN ('PENDING', 'CONFIRMED')
-                        """)
-                .param("id", imageId)
-                .param("ownerId", ownerUserId)
-                .param("purpose", expectedPurpose)
-                .update();
-        return rows > 0;
     }
 
     void linkToRequest(UUID requestId, List<UUID> imageIds) {
@@ -64,19 +47,17 @@ class UploadAssetLinker {
         }
     }
 
+    /** Ordem de posição; {@code imageAssetId} é depois resolvido via {@code UploadsApi#resolve}. */
     List<RequestImageRow> findByRequestId(UUID requestId) {
         return jdbcClient.sql("""
-                        SELECT ri.image_asset_id, ua.object_key, ua.content_type, ri.position
-                        FROM request_image ri
-                        JOIN upload_asset ua ON ua.id = ri.image_asset_id
-                        WHERE ri.request_id = :requestId
-                        ORDER BY ri.position
+                        SELECT image_asset_id, position
+                        FROM request_image
+                        WHERE request_id = :requestId
+                        ORDER BY position
                         """)
                 .param("requestId", requestId)
                 .query((rs, rowNum) -> new RequestImageRow(
                         (UUID) rs.getObject("image_asset_id"),
-                        rs.getString("object_key"),
-                        rs.getString("content_type"),
                         rs.getInt("position")))
                 .list();
     }

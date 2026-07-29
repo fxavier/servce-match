@@ -8,9 +8,16 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.ErrorResponseException;
+import pt.servimatch.modules.categories.CategoriesApi;
+import pt.servimatch.modules.matching.MatchingApi;
+import pt.servimatch.modules.providers.ProvidersApi;
 import pt.servimatch.modules.requests.RequestPublished;
+import pt.servimatch.modules.uploads.ImageRef;
+import pt.servimatch.modules.uploads.UploadPurpose;
+import pt.servimatch.modules.uploads.UploadsApi;
 import pt.servimatch.modules.requests.internal.web.AddressDto;
 import pt.servimatch.modules.requests.internal.web.CreateServiceRequestRequest;
+import pt.servimatch.modules.requests.internal.web.ImageRefDto;
 import pt.servimatch.modules.requests.internal.web.ServiceRequestDto;
 
 import java.time.Instant;
@@ -38,9 +45,15 @@ class RequestsServiceTest {
     @Mock
     private RequestRepository repository;
     @Mock
-    private CategoryLookup categoryLookup;
+    private CategoriesApi categoriesApi;
     @Mock
     private UploadAssetLinker uploadAssetLinker;
+    @Mock
+    private ProvidersApi providersApi;
+    @Mock
+    private MatchingApi matchingApi;
+    @Mock
+    private UploadsApi uploadsApi;
 
     private ApplicationEventPublisher events;
     private RequestsService service;
@@ -52,9 +65,9 @@ class RequestsServiceTest {
     @BeforeEach
     void setUp() {
         events = mock(ApplicationEventPublisher.class);
-        service = new RequestsService(repository, categoryLookup, uploadAssetLinker, events);
+        service = new RequestsService(repository, categoriesApi, uploadAssetLinker, events, providersApi, matchingApi, uploadsApi);
         lenient().when(uploadAssetLinker.findByRequestId(any())).thenReturn(List.of());
-        lenient().when(categoryLookup.findById(any())).thenReturn(Optional.empty());
+        lenient().when(categoriesApi.findById(any())).thenReturn(Optional.empty());
     }
 
     @Test
@@ -98,7 +111,7 @@ class RequestsServiceTest {
 
     @Test
     void createDraftRejectsInactiveOrMissingCategory() {
-        when(categoryLookup.findActiveById(categoryId)).thenReturn(Optional.empty());
+        when(categoriesApi.findActiveById(categoryId)).thenReturn(Optional.empty());
         CreateServiceRequestRequest request = new CreateServiceRequestRequest(
                 categoryId, "Fuga de água na cozinha", null,
                 new AddressDto("Rua Teste", null, "1000-001", "Lisboa", "1106", "PT", null),
@@ -109,6 +122,65 @@ class RequestsServiceTest {
                         ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY));
 
         verify(repository, never()).insertDraft(any());
+    }
+
+    /**
+     * ADR-0010 fechado nesta onda: {@code createDraft} já não confirma o
+     * asset por SQL direto — delega em {@code UploadsApi#confirmOwnedUpload}
+     * (posse, purpose, magic bytes), uma chamada por {@code imageId}, com o
+     * {@code purpose REQUEST_ATTACHMENT} correto.
+     */
+    @Test
+    void createDraftConfirmsEachImageWithUploadsApiUsingTheRequestAttachmentPurpose() {
+        UUID imageA = UUID.randomUUID();
+        UUID imageB = UUID.randomUUID();
+        when(categoriesApi.findActiveById(categoryId)).thenReturn(Optional.of(new CategoriesApi.CategoryView(categoryId, null, "cat", "Categoria", true)));
+        when(repository.insertDraft(any())).thenReturn(requestId);
+        when(repository.findById(requestId)).thenReturn(Optional.of(row("DRAFT", null)));
+
+        CreateServiceRequestRequest request = new CreateServiceRequestRequest(
+                categoryId, "Fuga de água na cozinha", null,
+                new AddressDto("Rua Teste", null, "1000-001", "Lisboa", "1106", "PT", null),
+                "NORMAL", null, List.of(imageA, imageB));
+
+        service.createDraft(ownerId, request);
+
+        verify(uploadsApi).confirmOwnedUpload(imageA, ownerId, UploadPurpose.REQUEST_ATTACHMENT);
+        verify(uploadsApi).confirmOwnedUpload(imageB, ownerId, UploadPurpose.REQUEST_ATTACHMENT);
+        verify(uploadAssetLinker).linkToRequest(requestId, List.of(imageA, imageB));
+    }
+
+    /**
+     * {@code toDto} junta {@code request_image} (só {@code imageId}+posição,
+     * já sem {@code object_key}/{@code contentType} — ver relatório de
+     * entrega) com {@code UploadsApi#resolve}, preservando a ordem de
+     * {@code position} independentemente da ordem devolvida por
+     * {@code resolve}.
+     */
+    @Test
+    void createDraftReturnsImagesResolvedByUploadsApiAndOrderedByPosition() {
+        UUID imageA = UUID.randomUUID();
+        UUID imageB = UUID.randomUUID();
+        when(categoriesApi.findActiveById(categoryId)).thenReturn(Optional.of(new CategoriesApi.CategoryView(categoryId, null, "cat", "Categoria", true)));
+        when(repository.insertDraft(any())).thenReturn(requestId);
+        when(repository.findById(requestId)).thenReturn(Optional.of(row("DRAFT", null)));
+        when(uploadAssetLinker.findByRequestId(requestId)).thenReturn(List.of(
+                new RequestImageRow(imageA, 0), new RequestImageRow(imageB, 1)));
+        // resolve devolve fora de ordem de propósito: a ordem final tem de vir de "position", não de "resolve".
+        when(uploadsApi.resolve(List.of(imageA, imageB))).thenReturn(List.of(
+                new ImageRef(imageB, "https://signed.example/b", "image/jpeg"),
+                new ImageRef(imageA, "https://signed.example/a", "image/jpeg")));
+
+        CreateServiceRequestRequest request = new CreateServiceRequestRequest(
+                categoryId, "Fuga de água na cozinha", null,
+                new AddressDto("Rua Teste", null, "1000-001", "Lisboa", "1106", "PT", null),
+                "NORMAL", null, List.of(imageA, imageB));
+
+        ServiceRequestDto dto = service.createDraft(ownerId, request);
+
+        assertThat(dto.images()).extracting(ImageRefDto::id).containsExactly(imageA, imageB);
+        assertThat(dto.images()).extracting(ImageRefDto::url)
+                .containsExactly("https://signed.example/a", "https://signed.example/b");
     }
 
     private ServiceRequestRow row(String status, Instant publishedAt) {
