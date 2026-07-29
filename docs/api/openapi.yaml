@@ -1,3 +1,8 @@
+# NOTA: `/auth/**` (login, logout, sessão) NÃO está documentado aqui. É
+# superfície do BFF (web/bff), não do backend Java — o BFF troca o código
+# OAuth2/PKCE por um cookie HttpOnly de sessão e nunca expõe o token ao
+# browser (ADR-0009). Este contrato descreve só a API que o BFF (web) e a
+# app móvel (RFC 8252) chamam depois de autenticados.
 openapi: 3.1.0
 
 info:
@@ -188,6 +193,28 @@ paths:
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
 
   /v1/requests:
+    get:
+      tags: [Requests]
+      summary: Listar os meus pedidos
+      description: |
+        Pedidos do cliente autenticado, mais recentes primeiro. **Role:**
+        `CUSTOMER`. Filtro opcional por `status`.
+      operationId: listMyRequests
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/RequestStatus' }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Página de pedidos.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServiceRequestPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
     post:
       tags: [Requests]
       summary: Criar pedido (DRAFT)
@@ -341,6 +368,127 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ProblemDetails' }
 
+  /v1/proposals/me:
+    get:
+      tags: [Proposals]
+      summary: Listar as minhas propostas
+      description: |
+        Propostas enviadas pelo prestador autenticado, mais recentes
+        primeiro. **Role:** `PROVIDER`.
+      operationId: listMyProposals
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Página de propostas.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProposalPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # NOTA de encaminhamento: `/v1/providers/me` tem de ser resolvido/gerado
+  # ANTES de `/v1/providers/{providerId}` — o path estático tem de ter
+  # precedência sobre o templado, ou "me" é interpretado como um providerId
+  # literal por qualquer router/cliente gerado que faça correspondência por
+  # ordem de declaração (o mesmo motivo pelo qual já existe
+  # `/v1/providers/me/requests` antes de qualquer rota templada de providers).
+  /v1/providers/me:
+    get:
+      tags: [Providers & Search]
+      summary: Obter o meu perfil de prestador
+      description: |
+        Perfil completo do prestador autenticado, para o ecrã de edição
+        (`/pro/perfil`). **Role:** `PROVIDER`.
+      operationId: getMyProviderProfile
+      responses:
+        '200':
+          description: Perfil do prestador.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProviderProfile' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Providers & Search]
+      summary: Substituir o meu perfil de prestador
+      description: |
+        Substituição **total** do perfil editável (categorias, zonas,
+        portfólio, headline, bio) — as listas do corpo descrevem o estado
+        final, não um incremento. **Role:** `PROVIDER`.
+      operationId: updateMyProviderProfile
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateProviderProfile' }
+      responses:
+        '200':
+          description: Perfil atualizado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProviderProfile' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: Sem permissão. Inclui o caso de o autenticado não ser `PROVIDER`.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetails' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /v1/providers/{providerId}:
+    get:
+      tags: [Providers & Search]
+      summary: Perfil público do prestador
+      description: |
+        Perfil público completo do prestador, para a página
+        `/prestadores/{id}` (indexável — ver `Seo.tsx`/`sitemap.xml`).
+        Público, não requer autenticação. Devolve `404` se o prestador não
+        existir ou não estiver visível (subscrição inativa ou não aprovado —
+        mesmo predicado usado em `GET /v1/search/providers`).
+      operationId: getProvider
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ProviderId'
+      responses:
+        '200':
+          description: Perfil do prestador.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProviderProfile' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/providers/{providerId}/reviews:
+    get:
+      tags: [Providers & Search]
+      summary: Avaliações do prestador
+      description: |
+        Avaliações recebidas pelo prestador, mais recentes primeiro.
+        Público, não requer autenticação (a página de perfil é indexável).
+        `authorName` é **PII reduzida**: primeiro nome mais inicial do
+        apelido (ex. "Mariana C."), calculada no **servidor** a partir do
+        `display_name` completo de `users` — este endpoint público nunca
+        expõe o nome completo do autor. Ver `ReviewWithAuthor`.
+      operationId: listProviderReviews
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ProviderId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Página de avaliações.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReviewWithAuthorPage' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /v1/providers/me/requests:
     get:
       tags: [Providers & Search]
@@ -408,6 +556,25 @@ paths:
               schema: { $ref: '#/components/schemas/ProviderSummaryPage' }
         '400': { $ref: '#/components/responses/BadRequest' }
 
+  /v1/conversations:
+    get:
+      tags: [Chat]
+      summary: Listar as minhas conversas
+      description: |
+        Conversas do autenticado (cliente ou prestador), mais recente
+        primeiro.
+      operationId: listConversations
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Página de conversas.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConversationPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /v1/conversations/{conversationId}/messages:
     get:
       tags: [Chat]
@@ -449,6 +616,29 @@ paths:
               schema: { $ref: '#/components/schemas/Message' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/bookings/{bookingId}:
+    get:
+      tags: [Bookings & Reviews]
+      summary: Detalhe da marcação
+      description: |
+        Detalhe de uma `Booking`, para o ecrã de avaliação. **Autorização:**
+        só o cliente ou o prestador da marcação; `403` caso contrário.
+      operationId: getBooking
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Marcação.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BookingDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /v1/bookings/{bookingId}/complete:
     post:
@@ -547,6 +737,34 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
+  /v1/subscriptions/me:
+    get:
+      tags: [Subscriptions & Payments]
+      summary: Estado da minha subscrição
+      description: |
+        Subscrição mais recente do prestador autenticado, em **qualquer**
+        estado (`PENDING`, `ACTIVE`, `PAST_DUE`, `EXPIRED`, `CANCELLED` —
+        não só a ativa). **Role:** `PROVIDER`. Devolve `404` quando o
+        prestador **nunca** subscreveu nenhum plano — deliberadamente não um
+        valor `NONE` do enum: acrescentar um valor novo a `SubscriptionStatus`
+        (já publicado) parte qualquer `switch`/`when` exaustivo em clientes já
+        instalados, e o modo de falha típico desse `switch` cai precisamente
+        no *gating* de subscrição que este endpoint serve.
+      operationId: getMySubscription
+      responses:
+        '200':
+          description: Subscrição mais recente do prestador autenticado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Subscription' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: O prestador autenticado nunca subscreveu nenhum plano.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetails' }
 
   /v1/webhooks/payments/{gateway}:
     post:
@@ -934,6 +1152,75 @@ components:
         avatarUrl: { type: [string, "null"], format: uri }
       required: [id, displayName, ratingAvg, ratingCount]
 
+    ProviderZone:
+      type: object
+      description: Zona de cobertura do prestador expressa por região administrativa.
+      properties:
+        regionCode: { type: string, description: Código de região administrativa (concelho/distrito). }
+        label: { type: string, description: Nome apresentável da região. }
+      required: [regionCode, label]
+
+    RatingDistribution:
+      type: object
+      description: Contagem de avaliações por número de estrelas (1 a 5).
+      properties:
+        "5": { type: integer, minimum: 0 }
+        "4": { type: integer, minimum: 0 }
+        "3": { type: integer, minimum: 0 }
+        "2": { type: integer, minimum: 0 }
+        "1": { type: integer, minimum: 0 }
+      required: ["5", "4", "3", "2", "1"]
+
+    ProviderProfile:
+      description: |
+        Perfil público completo do prestador. Estende `ProviderSummary`
+        (usado em pesquisa e propostas) com os dados da página de perfil
+        (`/prestadores/{id}`, indexável). Devolvido por
+        `GET /v1/providers/{providerId}` e, para o próprio prestador, por
+        `GET`/`PUT /v1/providers/me`.
+      allOf:
+        - $ref: '#/components/schemas/ProviderSummary'
+        - type: object
+          properties:
+            bio: { type: string }
+            categoryNames:
+              type: array
+              items: { type: string }
+            zones:
+              type: array
+              items: { $ref: '#/components/schemas/ProviderZone' }
+            location: { $ref: '#/components/schemas/GeoPoint' }
+            ratingDistribution: { $ref: '#/components/schemas/RatingDistribution' }
+            portfolioImageUrls:
+              type: array
+              items: { type: string, format: uri }
+            memberSince: { type: string, format: date-time }
+          required: [bio, categoryNames, zones, location, ratingDistribution, portfolioImageUrls, memberSince]
+
+    UpdateProviderProfile:
+      type: object
+      description: |
+        Corpo de `PUT /v1/providers/me`. Substituição **total**: as listas
+        (`categoryIds`, `regionCodes`, `portfolioImageIds`) descrevem o
+        estado final, não um incremento — omitir um valor existente remove-o.
+      properties:
+        headline: { type: string, maxLength: 160 }
+        bio: { type: string, maxLength: 4000 }
+        categoryIds:
+          type: array
+          items: { type: string, format: uuid }
+        regionCodes:
+          type: array
+          description: Zonas de cobertura por região administrativa (modo `ADMIN_REGION`).
+          items: { type: string }
+        portfolioImageIds:
+          type: array
+          description: |
+            IDs de imagens previamente carregadas com `purpose: PROVIDER_PORTFOLIO`
+            (`POST /v1/uploads`).
+          items: { type: string, format: uuid }
+      required: [headline, categoryIds, regionCodes, portfolioImageIds]
+
     CreateMessage:
       type: object
       properties:
@@ -957,6 +1244,26 @@ components:
         readAt: { type: [string, "null"], format: date-time }
       required: [id, conversationId, senderId, body, sentAt]
 
+    ConversationSummary:
+      type: object
+      description: Item de `GET /v1/conversations` — resumo para a lista de conversas do autenticado.
+      properties:
+        id: { type: string, format: uuid }
+        counterpartName: { type: string }
+        counterpartAvatarSeed:
+          type: string
+          description: Semente determinística para gerar um avatar genérico (não é uma foto real).
+        lastMessagePreview:
+          type: [string, "null"]
+          description: "null quando a conversa ainda não tem nenhuma mensagem (existe desde a proposta aceite)."
+        lastMessageAt:
+          type: [string, "null"]
+          format: date-time
+          description: "null quando a conversa ainda não tem nenhuma mensagem."
+        unreadCount: { type: integer, minimum: 0 }
+        requestTitle: { type: string }
+      required: [id, counterpartName, counterpartAvatarSeed, lastMessagePreview, lastMessageAt, unreadCount, requestTitle]
+
     Booking:
       type: object
       properties:
@@ -969,6 +1276,34 @@ components:
           enum: [CONFIRMED, IN_PROGRESS, COMPLETED, CANCELLED, NO_SHOW]
         completedAt: { type: [string, "null"], format: date-time }
       required: [id, proposalId, status]
+
+    BookingDetail:
+      description: |
+        Detalhe de uma `Booking`, para o ecrã de avaliação
+        (`GET /v1/bookings/{bookingId}`). Estende `Booking` com o `users.id`
+        da contraparte: `targetId` em `POST /v1/reviews` é um `users.id`, mas
+        `Proposal.providerId` é um `provider_profile.id` — sem
+        `counterpartUserId` não é possível preencher `targetId` a partir
+        desta resposta do lado do prestador (defeito assimétrico, invisível
+        em teste manual do lado do cliente).
+      allOf:
+        - $ref: '#/components/schemas/Booking'
+        - type: object
+          properties:
+            requestTitle: { type: string }
+            counterpartUserId:
+              type: string
+              format: uuid
+              description: |
+                `users.id` da contraparte (o cliente, se o autenticado for o
+                prestador; o prestador, se o autenticado for o cliente).
+            counterpartName: { type: string }
+            canReview:
+              type: boolean
+              description: |
+                Se o autenticado ainda pode submeter uma avaliação para esta
+                marcação (`COMPLETED` e ainda não avaliada por si).
+          required: [requestTitle, counterpartUserId, counterpartName, canReview]
 
     CreateReview:
       type: object
@@ -990,6 +1325,43 @@ components:
         comment: { type: string }
         createdAt: { type: string, format: date-time }
       required: [id, bookingId, authorId, targetId, rating, createdAt]
+
+    ReviewWithAuthor:
+      type: object
+      description: |
+        Avaliação pública com autor **PII-reduzido**: `authorName` é o
+        primeiro nome mais a inicial do apelido (ex. "Mariana C."), calculado
+        no **servidor** a partir do `display_name` completo de `users` —
+        `GET /v1/providers/{providerId}/reviews` é público e indexável, o
+        nome completo do autor nunca é exposto aqui.
+      properties:
+        id: { type: string, format: uuid }
+        authorName: { type: string, example: "Mariana C." }
+        authorAvatarSeed:
+          type: string
+          description: Semente determinística para gerar um avatar genérico (não é uma foto real).
+        targetId: { type: string, format: uuid, description: "Utilizador avaliado (users.id do prestador)." }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string, maxLength: 2000 }
+        createdAt: { type: string, format: date-time }
+        providerResponse:
+          type: [string, "null"]
+          description: |
+            Resposta pública do prestador à avaliação. **Nullable por
+            desenho**: a coluna `review.provider_response` ainda não existe
+            na migração `V10__bookings_and_reviews.sql` — este campo fica
+            `null` até essa coluna ser acrescentada pelo `db-migrations`.
+            Nenhum cliente deve assumir que virá sempre preenchido.
+      required: [id, authorName, authorAvatarSeed, targetId, rating, createdAt]
+
+    ReviewWithAuthorPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ReviewWithAuthor' }
+        page: { $ref: '#/components/schemas/PageMeta' }
+      required: [items, page]
 
     SubscriptionPlan:
       type: object
@@ -1125,5 +1497,14 @@ components:
         items:
           type: array
           items: { $ref: '#/components/schemas/Message' }
+        page: { $ref: '#/components/schemas/PageMeta' }
+      required: [items, page]
+
+    ConversationPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ConversationSummary' }
         page: { $ref: '#/components/schemas/PageMeta' }
       required: [items, page]
