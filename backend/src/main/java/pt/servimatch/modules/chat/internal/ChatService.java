@@ -8,6 +8,7 @@ import pt.servimatch.modules.chat.internal.web.ImageRefDto;
 import pt.servimatch.modules.chat.internal.web.MessageDto;
 import pt.servimatch.modules.chat.internal.web.MessagePageDto;
 import pt.servimatch.modules.chat.internal.web.PageMetaDto;
+import pt.servimatch.modules.providers.ProvidersApi;
 import pt.servimatch.modules.uploads.ImageRef;
 import pt.servimatch.modules.uploads.UploadPurpose;
 import pt.servimatch.modules.uploads.UploadsApi;
@@ -35,10 +36,12 @@ class ChatService {
 
     private final ConversationRepository repository;
     private final UploadsApi uploadsApi;
+    private final ProvidersApi providersApi;
 
-    ChatService(ConversationRepository repository, UploadsApi uploadsApi) {
+    ChatService(ConversationRepository repository, UploadsApi uploadsApi, ProvidersApi providersApi) {
         this.repository = repository;
         this.uploadsApi = uploadsApi;
+        this.providersApi = providersApi;
     }
 
     /** Chamado por {@link ProposalAcceptedListener}; idempotente (ver {@link ConversationRepository#createIfAbsent}). */
@@ -70,16 +73,19 @@ class ChatService {
 
     /**
      * {@code sendMessage}: o cliente escreve sempre (CLAUDE.md §3.3 — "o
-     * cliente continua a poder escrever"); o prestador só se a subscrição
-     * estiver {@code ACTIVE} nesse preciso instante — sem isso, uma
-     * conversa já existente fica <em>read-only</em> para ele, e a mensagem
-     * é recusada com {@code 403 subscription-required}, nunca criada.
+     * cliente continua a poder escrever"); o prestador só se estiver
+     * elegível ({@link ProvidersApi.ProviderEligibility#isEligible()} —
+     * aprovado e visível, o mesmo predicado usado por {@code proposals} e
+     * {@code requests} para o mesmo gating por subscrição, ARQUITETURA
+     * §3.3) nesse preciso instante — sem isso, uma conversa já existente
+     * fica <em>read-only</em> para ele, e a mensagem é recusada com
+     * {@code 403 subscription-required}, nunca criada.
      */
     @Transactional
     MessageDto sendMessage(UUID conversationId, UUID senderId, CreateMessageRequest request) {
         ConversationRow conversation = findConversation(conversationId);
         ParticipantRole role = requireParticipant(conversation, senderId);
-        if (role == ParticipantRole.PROVIDER && !repository.isProviderVisible(conversation.providerId())) {
+        if (role == ParticipantRole.PROVIDER && !isProviderEligible(conversation.providerId())) {
             throw Problems.subscriptionRequired(
                     "Subscrição inativa: esta conversa está em modo só de leitura para o prestador.");
         }
@@ -111,13 +117,28 @@ class ChatService {
         if (conversation.customerId().equals(viewerUserId)) {
             return ParticipantRole.CUSTOMER;
         }
-        boolean isProviderParticipant = repository.findProviderIdByUserId(viewerUserId)
+        boolean isProviderParticipant = providersApi.findProviderIdByUserId(viewerUserId)
                 .map(providerId -> providerId.equals(conversation.providerId()))
                 .orElse(false);
         if (isProviderParticipant) {
             return ParticipantRole.PROVIDER;
         }
         throw Problems.forbidden("Só os participantes da conversa podem aceder às mensagens.");
+    }
+
+    /**
+     * Elegibilidade do prestador para escrever (ARQUITETURA §3.3): aprovado
+     * <b>e</b> visível, não só visível — mesmo predicado que
+     * {@code proposals.internal.ProposalsService} e
+     * {@code requests.internal.RequestsController} aplicam via
+     * {@link ProvidersApi.ProviderEligibility#isEligible()}. Um prestador
+     * aprovado mas escondido por subscrição inativa, ou visível mas ainda
+     * pendente de aprovação administrativa, não deve poder escrever.
+     */
+    private boolean isProviderEligible(UUID providerId) {
+        return providersApi.checkEligibility(providerId)
+                .map(ProvidersApi.ProviderEligibility::isEligible)
+                .orElse(false);
     }
 
     /**

@@ -16,28 +16,6 @@ import java.util.UUID;
  * Acesso a {@code conversation}/{@code message}/{@code message_attachment}
  * (V9).
  *
- * <p><b>Nota de fronteira (SQL nativo, ADR-0010 §Decisão — leitura
- * <em>set-based</em> permitida sob condições, escrita proibida):</b>
- * {@link #findProviderIdByUserId} e {@link #isProviderVisible} leem
- * {@code provider_profile} diretamente por SQL, sem importar nenhuma classe
- * de {@code pt.servimatch.modules.providers} — {@code chat.package-info}
- * (propriedade do {@code backend-platform}) não inclui {@code providers} em
- * {@code allowedDependencies}. Mesmo padrão que
- * {@code matching.internal.EligibilityRepository}: é o único jeito de
- * autorizar "o prestador X é participante desta conversa" e de aplicar o
- * <em>gating</em> por subscrição de {@code ARQUITETURA.md §3.3}
- * ({@code visibility_state = 'VISIBLE'}, o mesmo booleano que
- * {@code ProvidersApi.checkEligibility(...).visible()} expõe).
- *
- * <p><b>Importante:</b> esta leitura <em>não está</em> na tabela enumerada
- * do ADR-0010 §Contexto (que só cobre {@code matching}, {@code search},
- * {@code billing}, {@code requests}) — o próprio ADR exige que uma leitura
- * nova entre módulos seja pedida ao {@code arquiteto}, não decidida por
- * quem a precisa. Fica sinalizado explicitamente no relatório de entrega
- * como pedido de adição à tabela do ADR-0010 (ou, em alternativa, de
- * {@code providers} a {@code allowedDependencies} de {@code chat}) — não
- * decidido unilateralmente aqui.
- *
  * <p>{@code @Lazy}: ver nota equivalente em
  * {@code pt.servimatch.modules.users.internal.UserRepository}.
  */
@@ -86,26 +64,6 @@ class ConversationRepository {
                 .param("id", id)
                 .query((rs, rowNum) -> mapConversation(rs))
                 .optional();
-    }
-
-    /** {@code provider_profile.id} do prestador por trás de {@code userId} — ver nota de fronteira na classe. */
-    Optional<UUID> findProviderIdByUserId(UUID userId) {
-        return jdbcClient.sql("SELECT id FROM provider_profile WHERE user_id = :userId")
-                .param("userId", userId)
-                .query(UUID.class)
-                .optional();
-    }
-
-    /** {@code visibility_state = 'VISIBLE'} — derivado de subscrição ativa (ARQUITETURA §3.3/§12.1). */
-    boolean isProviderVisible(UUID providerId) {
-        return Boolean.TRUE.equals(jdbcClient.sql("""
-                        SELECT EXISTS (
-                            SELECT 1 FROM provider_profile WHERE id = :id AND visibility_state = 'VISIBLE'
-                        )
-                        """)
-                .param("id", providerId)
-                .query(Boolean.class)
-                .single());
     }
 
     UUID insertMessage(UUID conversationId, UUID senderId, String body) {
