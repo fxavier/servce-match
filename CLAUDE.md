@@ -100,6 +100,12 @@ Derivam dos ADR 0002 e 0009. Qualquer PR que os viole é rejeitado, sem exceçã
 - **Nunca** usar webview embebido para autenticação em mobile (RFC 8252).
 - O *gating* por subscrição é uma **regra de domínio no servidor**. Um cliente
   nunca é autoridade sobre o seu plano; a UI só espelha o que o servidor decide.
+- **A elegibilidade resolve-se na leitura, nunca a partir de estado projetado**
+  (ADR-0011). O facto "subscrição" só é respondido por `billing`
+  (`SubscriptionLifecycle`); o facto "aprovação" só por `providers`. Não se copia
+  o estado da subscrição para outra tabela, e o conjunto de estados que concede
+  visibilidade (`ACTIVE`/`PAST_DUE` + período válido) tem **um único literal** no
+  código, publicado por `billing`. Quem duplica a regra reabre o defeito.
 - Webhooks de pagamento: verificar assinatura, ser idempotentes (`raw_event_id`
   único) e ter job de reconciliação. Nunca ativar subscrição a partir de um
   evento não verificado.
@@ -123,6 +129,14 @@ Derivam dos ADR 0002 e 0009. Qualquer PR que os viole é rejeitado, sem exceçã
 - **Branches**: `feat/<agente>/<assunto>`, uma por agente e por onda.
 - Nada é considerado feito sem teste automatizado a cobrir o caminho principal
   **e** pelo menos um caso de erro.
+- **Fixtures não fabricam estado que a produção tem de produzir** (ADR-0011 D9).
+  Um teste leva o sistema ao estado pelo caminho de produção (API pública do
+  módulo dono). `INSERT` direto só é tolerável se existir, no mesmo conjunto de
+  testes, um teste que exercite a **transição** que produz esse estado. Corolário
+  aplicável em revisão: toda a coluna lida por um predicado de decisão tem de ter,
+  em produção, pelo menos um escritor identificável — se não tem, é defeito, não é
+  "por implementar". Foi assim que o *gating* por subscrição passou meses verde e
+  desligado.
 
 ## 6. Protocolo de execução paralela
 

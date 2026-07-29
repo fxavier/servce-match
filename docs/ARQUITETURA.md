@@ -321,12 +321,12 @@ como API pública síncrona (`MatchingApi`) e **ainda não tem consumidor nenhum
 - `search` aplica o filtro geográfico usando diretamente o fragmento
   `geo.CoverageSql`, não `MatchingApi` — legítimo, é o mesmo fragmento partilhado,
   mas as regras não-geográficas ficam duplicadas nos dois módulos;
-- `GET /v1/providers/me/requests` (§11.2, "pedidos **elegíveis** recebidos")
-  valida hoje apenas subscrição e aprovação, e devolve a lista de pedidos
-  publicados **sem** aplicar categoria nem cobertura, apesar de existir
-  `MatchingApi.filterEligibleRequestIds` desenhada para o efeito. É uma
-  divergência entre o requisito e a implementação, com impacto de privacidade
-  (§5.7), não uma decisão de arquitetura;
+- `GET /v1/providers/me/requests` (§11.2, "pedidos **elegíveis** recebidos") já
+  aplica categoria (pré-filtro na consulta paginada) e cobertura geográfica em
+  lote. Continua, porém, a **não** validar subscrição: o *gate* de entrada chama
+  `ProvidersApi.checkEligibility`, que até ao ADR-0011 nunca consultava
+  `billing`. Corrigido por esse ADR (P1 verdadeira em `checkEligibility` + P1
+  também no predicado de lote, como defesa em profundidade);
 - o *listener* de `RequestPublished` que seleciona e notifica prestadores
   elegíveis chega com `notifications`, na Onda 1b — sem canal de notificação não
   teria efeito observável.
@@ -466,7 +466,7 @@ O `sub` (subject) do token Keycloak é a **chave estável** que liga a identidad
 
 **User** — `id (UUID)`, `keycloak_sub (único)`, `email`, `display_name`, `status`, `created_at`. 1–1 com `CustomerProfile` e/ou `ProviderProfile`; 1–N `Address` **quando esta entrar** (§9.1).
 
-**ProviderProfile** — `id`, `user_id`, `company_id?`, `headline`, `bio`, `verified`, `approval_status`, `visibility_state` (derivado da subscrição), `rating_avg`, `rating_count`. N–M com `Category` (via `ProviderCategory`); 1–N `ProviderServiceArea`.
+**ProviderProfile** — `id`, `user_id`, `company_id?`, `headline`, `bio`, `verified`, `approval_status`, `rating_avg`, `rating_count`. N–M com `Category` (via `ProviderCategory`); 1–N `ProviderServiceArea`. **Sem `visibility_state`** (removido pelo ADR-0011): a visibilidade resolve-se na leitura, a partir de `billing`. `approval_status` só transita por `PATCH /v1/admin/providers/{providerId}/approval` (ADR-0011 D7); `rating_avg`/`rating_count` são agregados de `reviews` e continuam **sem produtor em produção** — achado registado no ADR-0011 D9, por resolver.
 
 **ProviderServiceArea** — `id`, `provider_id`, `mode` (`RADIUS` | `ADMIN_REGION`), `center geography(Point,4326)?`, `radius_m?`, `region_code?`. Índice **GiST** sobre `center`.
 
@@ -546,12 +546,19 @@ SELECT p.id
 FROM candidates c
 JOIN provider_profile p ON p.id = c.provider_id
 WHERE p.approval_status = 'APPROVED'
-  AND p.visibility_state = 'VISIBLE'
-  AND EXISTS (SELECT 1 FROM subscription s
-              WHERE s.provider_id = p.id AND s.status = 'ACTIVE')
+  AND EXISTS (SELECT 1 FROM subscription s                 -- ADR-0011: um só literal,
+              WHERE s.provider_id = p.id                   -- publicado por billing
+                AND s.status IN ('ACTIVE', 'PAST_DUE')     -- (grace faz parte da regra)
+                AND s.current_period_end >= now())
   AND EXISTS (SELECT 1 FROM provider_category pc
               WHERE pc.provider_id = p.id AND pc.category_id = :category);
 ```
+
+O `visibility_state = 'VISIBLE'` que aqui figurava foi **removido** pelo ADR-0011:
+era uma cópia do estado da subscrição sem produtor, e a conjunção com ela anulava
+o *grace period* de `PAST_DUE` prometido em §12.1. O conjunto de estados não é
+reescrito à mão em cada consulta — é consumido do fragmento publicado por
+`billing`, à imagem de `geo.CoverageSql`.
 
 **Não simplificar esta consulta sem `EXPLAIN`.** A forma ingénua — um único
 `ST_DWithin(center, :point, radius_m)` com o raio a vir da coluna — está
@@ -657,7 +664,23 @@ Com apps publicadas nas lojas, os clientes **não se atualizam instantaneamente*
         ACTIVE ──cancelar──▶ (cancel_at_period_end=true) ──fim do período──▶ CANCELLED ◀──┘
 ```
 
-O campo **`visibility_state`** do prestador é **derivado** de `Subscription.status`: `ACTIVE`/`PAST_DUE`(grace) → `VISIBLE`; `EXPIRED`/`CANCELLED` → `HIDDEN`. Transições disparadas por **webhooks** e por um **job de expiração** (varre `current_period_end < now` para casos sem webhook).
+**Visibilidade do prestador (revisto pelo ADR-0011).** Não existe campo
+`visibility_state`: a visibilidade **não é projetada** para `provider_profile`, é
+**resolvida na leitura** a partir de `Subscription.status`. O predicado único é
+`status ∈ {ACTIVE, PAST_DUE}` (o *grace* faz parte da definição, não é uma exceção
+dos leitores) **e** `current_period_end >= now`, exposto por
+`billing.SubscriptionLifecycle.isVisibilityEligible`. `EXPIRED`/`CANCELLED` nunca
+concedem visibilidade. As transições continuam a ser disparadas por **webhooks** e
+por um **job de expiração** (varre `current_period_end < now` para casos sem
+webhook) — mas o job já **não** é o que separa quem paga de quem não paga: o
+predicado compara o período na própria leitura, para que um job atrasado não deixe
+ninguém a operar sem subscrição. A duração do *grace* é imposta pela transição
+`PAST_DUE → CANCELLED`, em `billing`, nunca por quem lê.
+
+A versão anterior desta secção descrevia `visibility_state` como campo derivado
+escrito por `billing` ao reagir aos eventos de subscrição. Esse produtor nunca
+existiu, e a sua ausência desativou o *gating* por subscrição nos dois sentidos —
+ver ADR-0011 para o diagnóstico e a decisão.
 
 ### 12.2 Recorrência por método de pagamento
 
