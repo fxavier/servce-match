@@ -8,14 +8,14 @@
   "supportedLocales": ["pt-PT", "en"],
   "defaultLocale": "pt-PT",
 
-  "registrationAllowed": true,
+  "registrationAllowed": false,
   "registrationEmailAsUsername": true,
   "loginWithEmailAllowed": true,
   "duplicateEmailsAllowed": false,
   "editUsernameAllowed": false,
   "resetPasswordAllowed": true,
   "rememberMe": true,
-  "verifyEmail": true,
+  "verifyEmail": false,
   "loginTheme": "keycloak",
 
   "passwordPolicy": "length(10) and digits(1) and lowerCase(1) and upperCase(1) and specialChars(1) and notUsername(undefined) and notEmail(undefined) and passwordHistory(3)",
@@ -100,7 +100,7 @@
     {
       "clientId": "servimatch-bff",
       "name": "ServiMatch Web BFF",
-      "description": "BFF do web (ADR-0002 par.8.3): segredo de dev, nao reutilizado noutro ambiente.",
+      "description": "BFF do web (ADR-0002 par.8.3): segredo de dev, nao reutilizado noutro ambiente. Fala com o Keycloak server-to-server: Direct Access Grant (grant_type=password) para login e Admin REST API via service account para registo (infra/README.md).",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,
@@ -108,8 +108,8 @@
       "secret": "dev-only-bff-secret-never-reused-elsewhere",
       "standardFlowEnabled": true,
       "implicitFlowEnabled": false,
-      "directAccessGrantsEnabled": false,
-      "serviceAccountsEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": true,
       "redirectUris": [
         "http://localhost:8080/login/oauth2/code/keycloak",
         "http://localhost:4000/auth/callback"
@@ -209,6 +209,7 @@
 
   "users": [
     {
+      "id": "07799610-a03f-40aa-a713-948d9d1b929d",
       "username": "customer.test@servimatch.pt",
       "email": "customer.test@servimatch.pt",
       "firstName": "Cliente",
@@ -221,6 +222,7 @@
       "realmRoles": ["CUSTOMER"]
     },
     {
+      "id": "d3d6d736-c434-41eb-b3dc-2201a3f69c4a",
       "username": "provider.test@servimatch.pt",
       "email": "provider.test@servimatch.pt",
       "firstName": "Prestador",
@@ -233,6 +235,7 @@
       "realmRoles": ["PROVIDER"]
     },
     {
+      "id": "35295b6c-a788-4f2b-bc22-8edc292aaf81",
       "username": "admin.test@servimatch.pt",
       "email": "admin.test@servimatch.pt",
       "firstName": "Admin",
@@ -243,6 +246,31 @@
         { "type": "password", "value": "DevLocal#2026", "temporary": false }
       ],
       "realmRoles": ["ADMIN"]
+    },
+    {
+      "id": "980712fa-004b-487e-9946-ddc65cadec49",
+      "username": "provider.trial@servimatch.pt",
+      "email": "provider.trial@servimatch.pt",
+      "firstName": "Rita",
+      "lastName": "Nogueira",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "DevLocal#2026", "temporary": false }
+      ],
+      "realmRoles": ["PROVIDER"]
+    },
+    {
+      "id": "65d60604-b03b-4a20-8c55-f141bde0e122",
+      "username": "service-account-servimatch-bff",
+      "enabled": true,
+      "emailVerified": false,
+      "serviceAccountClientId": "servimatch-bff",
+      "credentials": [],
+      "realmRoles": ["default-roles-servimatch"],
+      "clientRoles": {
+        "realm-management": ["manage-users", "view-users"]
+      }
     }
   ]
 }
