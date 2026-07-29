@@ -24,10 +24,26 @@
  *       ({@code MESSAGE_ATTACHMENT}) via
  *       {@link pt.servimatch.modules.uploads.UploadsApi}, nunca lendo
  *       {@code upload_asset} diretamente (CLAUDE.md §4).</li>
+ *   <li>{@code providers} — via
+ *       {@link pt.servimatch.modules.providers.ProvidersApi}, para saber se
+ *       o utilizador é o prestador da conversa
+ *       ({@code findProviderIdByUserId}) e para o gating por subscrição
+ *       ({@code checkEligibility().visible()}, o mesmo {@code
+ *       visibility_state} do prestador). Acrescentado nesta revisão (Onda
+ *       1c, {@code backend-platform}) para substituir o SQL direto a
+ *       {@code provider_profile} que o {@code ConversationRepository} do
+ *       {@code backend-domain} usava por não ter esta dependência — ao
+ *       contrário do {@code matching} (leitura <em>set-based</em>, plano de
+ *       execução sensível), o chat lê um prestador por conversa, pelo que o
+ *       argumento que justificaria SQL direto (ADR-0010) não se aplica
+ *       aqui; a API Java chega.</li>
  * </ul>
  */
 @org.springframework.modulith.ApplicationModule(
         displayName = "Chat",
-        allowedDependencies = {"modules.users", "modules.requests", "modules.proposals", "modules.uploads"}
+        allowedDependencies = {
+                "modules.users", "modules.requests", "modules.proposals",
+                "modules.uploads", "modules.providers"
+        }
 )
 package pt.servimatch.modules.chat;
