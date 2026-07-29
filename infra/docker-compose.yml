@@ -45,6 +45,11 @@ services:
     image: quay.io/keycloak/keycloak:26.7.0
     container_name: servimatch-keycloak
     restart: unless-stopped
+    # O realm importado (infra/keycloak/realm-servimatch.json) dá ao client
+    # confidencial "servimatch-bff" Direct Access Grant + service account,
+    # para registo/login por formulário próprio falado server-to-server pelo
+    # BFF (KEYCLOAK_BFF_CLIENT_SECRET / KEYCLOAK_ADMIN_API_BASE_URL no .env
+    # da raiz; detalhe em infra/README.md).
     command: ["start-dev", "--import-realm"]
     environment:
       # Identidade delegada a Keycloak (ADR-0002) — o backend nunca gere
