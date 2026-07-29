@@ -32,12 +32,16 @@ public interface PaymentGateway {
 
     /**
      * Extrai um identificador de evento estável para idempotência, sem
-     * validar nada — usado apenas para a chave de deduplicação
-     * ({@code payment_gateway_event.raw_event_id}) antes/independentemente
-     * da verificação de assinatura (persistimos o evento em bruto mesmo
-     * quando a assinatura falha, para auditoria — ver
-     * {@code payment_gateway_event.signature_verified}). Nunca aciona
-     * efeito de domínio.
+     * validar nada — chamado antes da verificação de assinatura, mas
+     * <b>só é usado como chave de deduplicação real</b>
+     * ({@code payment_gateway_event.raw_event_id}, {@code UNIQUE(gateway,
+     * raw_event_id)}) quando a assinatura se confirma válida. Se a
+     * assinatura falhar, o evento é gravado para auditoria sob uma chave
+     * sintética própria (quarentena), nunca sob este id — de outro modo um
+     * evento forjado com um {@code raw_event_id} previsível (ex.:
+     * Eupago/IfthenPay, cujo id deriva de dados que o próprio remetente
+     * conhece) poderia ocupar a linha do evento genuíno e bloqueá-lo para
+     * sempre. Nunca aciona efeito de domínio.
      */
     String peekEventId(byte[] rawBody);
 

@@ -24,14 +24,22 @@ import java.util.UUID;
  * <ol>
  *   <li>identificar o evento (sem confiar nele) — {@link PaymentGateway#peekEventId};</li>
  *   <li>verificar a assinatura sobre os bytes exatos — {@link PaymentGateway#verifySignature};</li>
- *   <li>persistir o evento em bruto de forma idempotente
- *       ({@code UNIQUE(gateway, raw_event_id)}); duplicado → no-op, mesmo
- *       que a assinatura seja inválida em ambas as tentativas;</li>
- *   <li>só com assinatura válida <b>e</b> linha nova, aplicar ao domínio.</li>
+ *   <li>assinatura inválida → gravar em quarentena, sob uma chave
+ *       sintética própria (nunca o {@code raw_event_id} real — ver
+ *       {@link JdbcPaymentGatewayEventRepository#insertQuarantined}), e
+ *       parar aqui;</li>
+ *   <li>assinatura válida → persistir de forma idempotente
+ *       ({@code UNIQUE(gateway, raw_event_id)},
+ *       {@link JdbcPaymentGatewayEventRepository#insertVerified}); linha
+ *       existente → duplicado, no-op;</li>
+ *   <li>só com linha nova <b>e</b> verificada, aplicar ao domínio.</li>
  * </ol>
  *
  * <p>Nenhuma subscrição é ativada sem passar por este caminho a partir de
- * um evento com {@code signature_verified = true}.
+ * um evento com {@code signature_verified = true}. E nenhum evento com
+ * assinatura inválida ocupa a chave {@code (gateway, raw_event_id)} de um
+ * evento genuíno que ainda não chegou — ver a nota de
+ * {@link JdbcPaymentGatewayEventRepository}.
  */
 @Service
 public class WebhookIngestService {
@@ -68,19 +76,25 @@ public class WebhookIngestService {
         boolean signatureValid = gateway.verifySignature(rawBody, headers);
         String payloadJson = safeJson(rawBody);
 
-        Optional<UUID> insertedRowId = eventRepository.insertIfAbsent(
-                gateway.code().value(), rawEventId, null, payloadJson, signatureValid);
+        if (!signatureValid) {
+            // Nunca gravar sob a chave (gateway, raw_event_id) real: um
+            // evento forjado com um raw_event_id conhecido/adivinhado não
+            // pode ocupar a linha do evento genuíno que ainda não chegou
+            // (ver JdbcPaymentGatewayEventRepository). Fica em quarentena,
+            // sob chave sintética, só para investigação.
+            eventRepository.insertQuarantined(gateway.code().value(), rawEventId, null, payloadJson);
+            log.warn("Payment webhook rejected: invalid signature (correlation_id={}, gateway={})",
+                    CorrelationIdSupport.currentOrNull(), gateway.code().value());
+            return IngestOutcome.of(IngestOutcome.Result.UNAUTHORIZED);
+        }
+
+        Optional<UUID> insertedRowId = eventRepository.insertVerified(
+                gateway.code().value(), rawEventId, null, payloadJson);
 
         if (insertedRowId.isEmpty()) {
             log.info("Duplicate payment gateway event ignored (correlation_id={}, gateway={})",
                     CorrelationIdSupport.currentOrNull(), gateway.code().value());
             return IngestOutcome.of(IngestOutcome.Result.DUPLICATE);
-        }
-
-        if (!signatureValid) {
-            log.warn("Payment webhook rejected: invalid signature (correlation_id={}, gateway={})",
-                    CorrelationIdSupport.currentOrNull(), gateway.code().value());
-            return IngestOutcome.of(IngestOutcome.Result.UNAUTHORIZED);
         }
 
         UUID eventRowId = insertedRowId.get();

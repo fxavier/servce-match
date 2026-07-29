@@ -136,6 +136,33 @@ class WebhookIngestServiceIntegrationTest {
     }
 
     @Test
+    void forgedEventWithInvalidSignatureCannotPoisonIdempotencyKeyForGenuineEvent() {
+        // Achado de auditoria (envenenamento da chave de idempotência): um
+        // atacante que conheça/adivinhe o raw_event_id de um evento futuro
+        // genuíno não pode bloqueá-lo enviando primeiro uma versão forjada
+        // com o mesmo id e assinatura inválida.
+        UUID subscriptionId = createPendingSubscriptionWithPayment("cs_poison_test");
+        String eventId = "evt_poison_" + UUID.randomUUID();
+        byte[] body = checkoutCompletedBody(eventId, subscriptionId, Instant.now().getEpochSecond())
+                .getBytes(StandardCharsets.UTF_8);
+        Map<String, String> forgedHeaders = Map.of("Stripe-Signature", "t=" + Instant.now().getEpochSecond() + ",v1=deadbeef");
+
+        // 1) O forjado, com o raw_event_id que o atacante conhece, chega primeiro.
+        IngestOutcome forged = ingestService.ingest("stripe", body, forgedHeaders);
+        assertThat(forged.result()).isEqualTo(IngestOutcome.Result.UNAUTHORIZED);
+        assertThat(lifecycle.findById(subscriptionId).orElseThrow().status()).isEqualTo(SubscriptionStatus.PENDING);
+
+        // 2) O evento legítimo, com o MESMO raw_event_id e assinatura válida, chega depois.
+        IngestOutcome genuine = ingestService.ingest("stripe", body, signedHeaders(body));
+
+        // Tem de ser processado — a linha forjada não pode ter ocupado a chave real.
+        assertThat(genuine.result()).isEqualTo(IngestOutcome.Result.PROCESSED);
+        assertThat(lifecycle.findById(subscriptionId).orElseThrow().status()).isEqualTo(SubscriptionStatus.ACTIVE);
+        // Só existe uma linha sob o raw_event_id real: a genuína.
+        assertThat(eventRepository.countByGatewayAndRawEventId("stripe", eventId)).isEqualTo(1);
+    }
+
+    @Test
     void duplicateEventIsProcessedOnlyOnce() {
         UUID subscriptionId = createPendingSubscriptionWithPayment("cs_dup_test");
         String eventId = "evt_dup_" + UUID.randomUUID();
