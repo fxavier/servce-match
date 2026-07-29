@@ -87,6 +87,20 @@ servimatch:
     capacity: 120
     refill-period: PT1M
     backend: in-memory
+    # CIDR (ou IP exato) dos proxies/load balancers de confiança cujo
+    # X-Forwarded-For é honrado para identificar o cliente. Vazio por
+    # omissão: sem um proxy configurado explicitamente aqui, o cabeçalho
+    # NUNCA é confiável (é trivialmente forjável por qualquer chamador) e
+    # usa-se sempre o IP da ligação TCP. Preencher em produção com o(s)
+    # CIDR do load balancer/reverse proxy real — nunca com "0.0.0.0/0".
+    trusted-proxies: ${RATE_LIMIT_TRUSTED_PROXIES:}
+    # Limite dedicado, mais apertado, para /v1/webhooks/** — aplicado além
+    # do limite global acima, não em substituição dele (o endpoint é
+    # público por desenho e persiste o corpo do pedido antes de validar a
+    # assinatura do gateway).
+    webhook:
+      capacity: 20
+      refill-period: PT1M
 
   # -------------------------------------------------------------------
   # Idempotência (Idempotency-Key em escritas não idempotentes)

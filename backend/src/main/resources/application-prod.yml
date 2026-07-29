@@ -1,0 +1,25 @@
+# Perfil "prod" (ADR-0006, achado 7 da auditoria de segurança): os mesmos
+# valores de application.yml, mas SEM os defaults de desenvolvimento dos
+# valores que são segredos reais. Em application.yml, uma variável de
+# ambiente em falta cai silenciosamente numa credencial pública e conhecida
+# deste repositório (ex.: DB_PASSWORD=servimatch,
+# UPLOADS_S3_SECRET_KEY=servimatch123) — o arranque tem sucesso, ligado com
+# um segredo publicado. Aqui, a mesma variável em falta faz o arranque
+# falhar (fail fast): sem placeholder de omissão, a resolução da
+# propriedade lança exceção antes de qualquer pedido ser aceite.
+#
+# Nota: UPLOADS_S3_SECRET_KEY="" (definida e vazia) continua válido — é o
+# sinal para usar a cadeia de credenciais por omissão (IAM/role), ver
+# UploadsStorageConfig. O que este perfil torna impossível é a variável
+# estar simplesmente por definir.
+#
+# Ativação: SPRING_PROFILES_ACTIVE=prod (tipicamente combinado com
+# "multi-instance": SPRING_PROFILES_ACTIVE=prod,multi-instance).
+
+spring:
+  datasource:
+    password: ${DB_PASSWORD}
+
+servimatch:
+  uploads:
+    secret-key: ${UPLOADS_S3_SECRET_KEY}
