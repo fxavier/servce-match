@@ -1,4 +1,4 @@
-package pt.servimatch.modules.requests.internal;
+package pt.servimatch.modules.categories.internal;
 
 import java.util.UUID;
 

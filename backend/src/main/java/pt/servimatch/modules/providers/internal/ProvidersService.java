@@ -7,6 +7,7 @@ import pt.servimatch.modules.providers.ProvidersApi;
 import pt.servimatch.modules.users.UsersApi;
 
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 // @Lazy em todos os beans deste módulo: ver nota em
@@ -53,6 +54,11 @@ class ProvidersService implements ProvidersApi {
                         row.id(),
                         "APPROVED".equals(row.approvalStatus()),
                         "VISIBLE".equals(row.visibilityState())));
+    }
+
+    @Override
+    public Set<UUID> workedCategoryIds(UUID providerId) {
+        return repository.findWorkedCategoryIds(providerId);
     }
 
     @Override

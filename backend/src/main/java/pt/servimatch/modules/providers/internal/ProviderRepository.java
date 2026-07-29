@@ -8,6 +8,7 @@ import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -39,6 +40,13 @@ class ProviderRepository {
                 .param("id", providerId)
                 .query(this::mapRow)
                 .optional();
+    }
+
+    Set<UUID> findWorkedCategoryIds(UUID providerId) {
+        return Set.copyOf(jdbcClient.sql("SELECT category_id FROM provider_category WHERE provider_id = :providerId")
+                .param("providerId", providerId)
+                .query((rs, rowNum) -> (UUID) rs.getObject("category_id"))
+                .list());
     }
 
     Optional<UUID> insertIfAbsent(UUID userId) {
