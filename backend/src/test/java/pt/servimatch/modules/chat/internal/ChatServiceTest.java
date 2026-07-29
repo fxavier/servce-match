@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.ErrorResponseException;
 import pt.servimatch.modules.chat.internal.web.CreateMessageRequest;
 import pt.servimatch.modules.chat.internal.web.MessageDto;
+import pt.servimatch.modules.providers.ProvidersApi;
 import pt.servimatch.modules.uploads.UploadPurpose;
 import pt.servimatch.modules.uploads.UploadsApi;
 
@@ -28,9 +29,12 @@ import static org.mockito.Mockito.when;
 /**
  * Autorização por participante e <em>gating</em> de subscrição de
  * {@code chat} (ARQUITETURA §3.3): o caminho principal (participante lê/
- * escreve) e os dois casos de erro que interessam — não-participante
- * recusado, prestador sem subscrição ativa recusado a escrever numa
- * conversa já existente (o cliente nunca é bloqueado).
+ * escreve) e os casos de erro que interessam — não-participante recusado,
+ * prestador não elegível recusado a escrever numa conversa já existente (o
+ * cliente nunca é bloqueado). Elegibilidade é
+ * {@link ProvidersApi.ProviderEligibility#isEligible()} (aprovado <b>e</b>
+ * visível — mesmo predicado de {@code proposals}/{@code requests}, não só
+ * a visibilidade), daí os dois casos de gating parcial abaixo.
  */
 @ExtendWith(MockitoExtension.class)
 class ChatServiceTest {
@@ -39,6 +43,8 @@ class ChatServiceTest {
     private ConversationRepository repository;
     @Mock
     private UploadsApi uploadsApi;
+    @Mock
+    private ProvidersApi providersApi;
 
     private ChatService service;
 
@@ -49,14 +55,14 @@ class ChatServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ChatService(repository, uploadsApi);
+        service = new ChatService(repository, uploadsApi, providersApi);
         lenient().when(repository.findAttachmentsForMessages(any())).thenReturn(List.of());
     }
 
     @Test
     void nonParticipantCannotListMessages() {
         when(repository.findById(conversationId)).thenReturn(Optional.of(conversation()));
-        when(repository.findProviderIdByUserId(any())).thenReturn(Optional.empty());
+        when(providersApi.findProviderIdByUserId(any())).thenReturn(Optional.empty());
 
         UUID stranger = UUID.randomUUID();
         assertThatThrownBy(() -> service.listMessages(conversationId, stranger, null, 20))
@@ -76,14 +82,37 @@ class ChatServiceTest {
         MessageDto dto = service.sendMessage(conversationId, customerId, new CreateMessageRequest("Olá, quando pode vir?", null));
 
         assertThat(dto.senderId()).isEqualTo(customerId);
-        verify(repository, never()).isProviderVisible(any());
+        verify(providersApi, never()).checkEligibility(any());
     }
 
     @Test
     void providerWithoutActiveSubscriptionCannotWriteToAnExistingConversation() {
         when(repository.findById(conversationId)).thenReturn(Optional.of(conversation()));
-        when(repository.findProviderIdByUserId(providerUserId)).thenReturn(Optional.of(providerId));
-        when(repository.isProviderVisible(providerId)).thenReturn(false);
+        when(providersApi.findProviderIdByUserId(providerUserId)).thenReturn(Optional.of(providerId));
+        when(providersApi.checkEligibility(providerId))
+                .thenReturn(Optional.of(new ProvidersApi.ProviderEligibility(providerId, true, false)));
+
+        assertThatThrownBy(() -> service.sendMessage(conversationId, providerUserId, new CreateMessageRequest("Já vou", null)))
+                .isInstanceOfSatisfying(ErrorResponseException.class,
+                        ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN))
+                .satisfies(ex -> assertThat(((ErrorResponseException) ex).getBody().getType().toString())
+                        .isEqualTo("https://errors.servimatch.pt/subscription-required"));
+
+        verify(repository, never()).insertMessage(any(), any(), any());
+    }
+
+    /**
+     * Visível (aparece em pesquisas) mas ainda pendente de aprovação
+     * administrativa: mesmo predicado de {@code proposals}/{@code requests}
+     * — {@code isEligible() == approved && visible} — também bloqueia a
+     * escrita, não só a ausência de visibilidade.
+     */
+    @Test
+    void providerVisibleButNotApprovedCannotWriteToAnExistingConversation() {
+        when(repository.findById(conversationId)).thenReturn(Optional.of(conversation()));
+        when(providersApi.findProviderIdByUserId(providerUserId)).thenReturn(Optional.of(providerId));
+        when(providersApi.checkEligibility(providerId))
+                .thenReturn(Optional.of(new ProvidersApi.ProviderEligibility(providerId, false, true)));
 
         assertThatThrownBy(() -> service.sendMessage(conversationId, providerUserId, new CreateMessageRequest("Já vou", null)))
                 .isInstanceOfSatisfying(ErrorResponseException.class,
@@ -99,8 +128,9 @@ class ChatServiceTest {
         UUID imageId = UUID.randomUUID();
         UUID messageId = UUID.randomUUID();
         when(repository.findById(conversationId)).thenReturn(Optional.of(conversation()));
-        when(repository.findProviderIdByUserId(providerUserId)).thenReturn(Optional.of(providerId));
-        when(repository.isProviderVisible(providerId)).thenReturn(true);
+        when(providersApi.findProviderIdByUserId(providerUserId)).thenReturn(Optional.of(providerId));
+        when(providersApi.checkEligibility(providerId))
+                .thenReturn(Optional.of(new ProvidersApi.ProviderEligibility(providerId, true, true)));
         when(repository.insertMessage(conversationId, providerUserId, "Envio foto")).thenReturn(messageId);
         when(repository.findMessageById(messageId)).thenReturn(Optional.of(
                 new MessageRow(messageId, conversationId, providerUserId, "Envio foto", Instant.now(), null)));
