@@ -1,0 +1,248 @@
+{
+  "id": "servimatch",
+  "realm": "servimatch",
+  "displayName": "ServiMatch",
+  "enabled": true,
+  "sslRequired": "external",
+  "internationalizationEnabled": true,
+  "supportedLocales": ["pt-PT", "en"],
+  "defaultLocale": "pt-PT",
+
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "editUsernameAllowed": false,
+  "resetPasswordAllowed": true,
+  "rememberMe": true,
+  "verifyEmail": true,
+  "loginTheme": "keycloak",
+
+  "passwordPolicy": "length(10) and digits(1) and lowerCase(1) and upperCase(1) and specialChars(1) and notUsername(undefined) and notEmail(undefined) and passwordHistory(3)",
+
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "maxFailureWaitSeconds": 900,
+  "minimumQuickLoginWaitSeconds": 60,
+  "waitIncrementSeconds": 60,
+  "quickLoginCheckMilliSeconds": 1000,
+  "maxDeltaTimeSeconds": 43200,
+  "failureFactor": 5,
+
+  "accessTokenLifespan": 300,
+  "accessTokenLifespanForImplicitFlow": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "ssoSessionIdleTimeoutRememberMe": 0,
+  "ssoSessionMaxLifespanRememberMe": 0,
+  "offlineSessionIdleTimeout": 2592000,
+  "offlineSessionMaxLifespanEnabled": false,
+  "accessCodeLifespan": 60,
+  "accessCodeLifespanUserAction": 300,
+  "accessCodeLifespanLogin": 1800,
+  "actionTokenGeneratedByAdminLifespan": 43200,
+  "actionTokenGeneratedByUserLifespan": 300,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+
+  "roles": {
+    "realm": [
+      {
+        "name": "CUSTOMER",
+        "description": "Cliente: publica pedidos, recebe propostas, conversa e avalia (docs/ARQUITETURA.md par.4.1)."
+      },
+      {
+        "name": "PROVIDER",
+        "description": "Prestador: perfil profissional, propostas e chat sujeitos ao gating de subscricao (par.3.3/par.8.4)."
+      },
+      {
+        "name": "ADMIN",
+        "description": "Administracao: utilizadores, categorias, planos, moderacao e auditoria (par.4.1)."
+      }
+    ]
+  },
+
+  "clients": [
+    {
+      "clientId": "servimatch-web",
+      "name": "ServiMatch Web SPA",
+      "description": "SPA React. Authorization Code + PKCE obrigatorio (ADR-0002).",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:5173/*",
+        "http://localhost:3000/*"
+      ],
+      "webOrigins": ["+"],
+      "protocolMappers": [
+        {
+          "name": "servimatch-backend-audience-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "servimatch-backend",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:5173/*##http://localhost:3000/*"
+      }
+    },
+    {
+      "clientId": "servimatch-bff",
+      "name": "ServiMatch Web BFF",
+      "description": "BFF do web (ADR-0002 par.8.3): segredo de dev, nao reutilizado noutro ambiente.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "dev-only-bff-secret-never-reused-elsewhere",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:8080/login/oauth2/code/keycloak",
+        "http://localhost:4000/auth/callback"
+      ],
+      "webOrigins": [],
+      "protocolMappers": [
+        {
+          "name": "servimatch-backend-audience-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "servimatch-backend",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:5173/*##http://localhost:3000/*"
+      }
+    },
+    {
+      "clientId": "servimatch-mobile",
+      "name": "ServiMatch Mobile (Flutter)",
+      "description": "App Flutter nativa. PKCE via system browser (AppAuth), sem webview (RFC 8252, ADR-0009).",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "https://app.servimatch.pt/oauth2redirect",
+        "pt.servimatch.app:/oauth2redirect"
+      ],
+      "webOrigins": [],
+      "protocolMappers": [
+        {
+          "name": "servimatch-backend-audience-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "servimatch-backend",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    },
+    {
+      "clientId": "servimatch-local-test",
+      "name": "ServiMatch Local Test Client (dev only)",
+      "description": "APENAS dev/CI: ROPC por curl para token de teste. Nunca replicar em producao.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [],
+      "webOrigins": [],
+      "protocolMappers": [
+        {
+          "name": "servimatch-backend-audience-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "servimatch-backend",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "servimatch-backend",
+      "name": "ServiMatch Backend (Resource Server)",
+      "description": "Representa a API Spring Boot como audiencia dos access tokens (ADR-0002). Bearer-only: nunca inicia login nem emite tokens proprios.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false
+    }
+  ],
+
+  "users": [
+    {
+      "username": "customer.test@servimatch.pt",
+      "email": "customer.test@servimatch.pt",
+      "firstName": "Cliente",
+      "lastName": "Teste",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "DevLocal#2026", "temporary": false }
+      ],
+      "realmRoles": ["CUSTOMER"]
+    },
+    {
+      "username": "provider.test@servimatch.pt",
+      "email": "provider.test@servimatch.pt",
+      "firstName": "Prestador",
+      "lastName": "Teste",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "DevLocal#2026", "temporary": false }
+      ],
+      "realmRoles": ["PROVIDER"]
+    },
+    {
+      "username": "admin.test@servimatch.pt",
+      "email": "admin.test@servimatch.pt",
+      "firstName": "Admin",
+      "lastName": "Teste",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "DevLocal#2026", "temporary": false }
+      ],
+      "realmRoles": ["ADMIN"]
+    }
+  ]
+}
