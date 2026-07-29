@@ -51,6 +51,8 @@ tags:
     description: Marcações e avaliações verificadas.
   - name: Subscriptions & Payments
     description: Subscrições dos prestadores e webhooks de pagamento.
+  - name: Admin
+    description: Operações administrativas, restritas a `ROLE_ADMIN`.
 
 security:
   - oidc: []
@@ -577,6 +579,40 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ProblemDetails' }
 
+  /v1/admin/providers/{providerId}/approval:
+    patch:
+      tags: [Admin]
+      summary: Decidir aprovação do prestador
+      description: |
+        Regista a decisão administrativa sobre a elegibilidade de operação do prestador
+        (`approval_status`). Transições válidas: `PENDING → APPROVED`, `PENDING → REJECTED`,
+        `APPROVED → SUSPENDED`; qualquer outra devolve `409`. **Role:** `ADMIN`.
+      operationId: decideProviderApproval
+      parameters:
+        - $ref: '#/components/parameters/ProviderId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateProviderApproval' }
+      responses:
+        '200':
+          description: Decisão aplicada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProviderApproval' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Transição inválida para o `approval_status` atual do prestador.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetails' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+
 components:
 
   securitySchemes:
@@ -608,6 +644,11 @@ components:
       schema: { type: string, format: uuid }
     ConversationId:
       name: conversationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ProviderId:
+      name: providerId
       in: path
       required: true
       schema: { type: string, format: uuid }
@@ -1002,6 +1043,47 @@ components:
         currentPeriodEnd: { type: string, format: date-time }
         cancelAtPeriodEnd: { type: boolean }
       required: [id, providerId, planId, status]
+
+    ProviderApprovalStatus:
+      type: string
+      description: |
+        Estado de aprovação do prestador (`approval_status`). `PENDING` é o valor inicial;
+        as restantes transições só se atingem por decisão administrativa
+        (`PATCH /v1/admin/providers/{providerId}/approval`).
+      enum: [PENDING, APPROVED, REJECTED, SUSPENDED]
+
+    ProviderApprovalDecision:
+      type: string
+      description: Valores atribuíveis pela decisão administrativa. `PENDING` nunca é um destino.
+      enum: [APPROVED, REJECTED, SUSPENDED]
+
+    UpdateProviderApproval:
+      type: object
+      description: |
+        Transições válidas: `PENDING → APPROVED`, `PENDING → REJECTED`, `APPROVED → SUSPENDED`.
+      properties:
+        decision: { $ref: '#/components/schemas/ProviderApprovalDecision' }
+        reason:
+          type: string
+          maxLength: 2000
+          description: |
+            Motivo da decisão. **Obrigatório** quando `decision` é `REJECTED` ou `SUSPENDED`
+            (a ausência devolve `422`); opcional para `APPROVED`.
+      required: [decision]
+
+    ProviderApproval:
+      type: object
+      description: Resultado da decisão administrativa sobre a elegibilidade de operação do prestador.
+      properties:
+        providerId: { type: string, format: uuid }
+        approvalStatus: { $ref: '#/components/schemas/ProviderApprovalStatus' }
+        reason: { type: [string, "null"] }
+        decidedBy:
+          type: string
+          format: uuid
+          description: Identificador do administrador (`ROLE_ADMIN`) que tomou a decisão.
+        decidedAt: { type: string, format: date-time }
+      required: [providerId, approvalStatus, decidedBy, decidedAt]
 
     # --- Envelopes de paginação por cursor ---
     PageMeta:
