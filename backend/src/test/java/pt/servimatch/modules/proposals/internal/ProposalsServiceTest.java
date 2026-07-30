@@ -12,16 +12,21 @@ import pt.servimatch.modules.providers.ProvidersApi;
 import pt.servimatch.modules.proposals.ProposalAccepted;
 import pt.servimatch.modules.proposals.internal.web.CreateProposalRequest;
 import pt.servimatch.modules.proposals.internal.web.MoneyDto;
+import pt.servimatch.modules.proposals.internal.web.ProposalDto;
+import pt.servimatch.modules.proposals.internal.web.ProposalPageDto;
 import pt.servimatch.modules.requests.RequestsApi;
 import pt.servimatch.modules.requests.ServiceRequestStatus;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -123,6 +128,54 @@ class ProposalsServiceTest {
                         ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
 
         verify(requestsApi, never()).confirm(any());
+    }
+
+    // ---------------------------------------------------------------- listMine (GET /v1/proposals/me)
+
+    /**
+     * Sem perfil de prestador → página vazia, não 403 (ver javadoc de
+     * {@code ProposalsService#listMine}): uma leitura nunca cria um perfil
+     * de prestador como efeito lateral.
+     */
+    @Test
+    void listMineReturnsEmptyPageWhenAuthenticatedUserHasNoProviderProfile() {
+        when(providersApi.findProviderIdByUserId(providerUserId)).thenReturn(Optional.empty());
+
+        ProposalPageDto page = service.listMine(providerUserId, null, 20);
+
+        assertThat(page.items()).isEmpty();
+        verify(repository, never()).findPageForProvider(any(), any(), any(), anyInt());
+    }
+
+    /** Isolamento: as propostas devolvidas são sempre filtradas em SQL pelo provider_id do autenticado. */
+    @Test
+    void listMineDelegatesOwnerToTheRepository() {
+        when(providersApi.findProviderIdByUserId(providerUserId)).thenReturn(Optional.of(providerId));
+        ProposalRow proposal = new ProposalRow(
+                proposalIdFixture(), requestId, providerId, 5000L, "EUR", "desc", 3, null, "SENT", Instant.now());
+        when(repository.findPageForProvider(eq(providerId), any(), any(), eq(21))).thenReturn(List.of(proposal));
+        when(providersApi.summary(providerId)).thenReturn(Optional.empty());
+
+        ProposalPageDto page = service.listMine(providerUserId, null, 20);
+
+        assertThat(page.items()).extracting(ProposalDto::providerId).containsExactly(providerId);
+        verify(repository).findPageForProvider(eq(providerId), any(), any(), eq(21));
+    }
+
+    /** Página inteira do mesmo prestador: um único ProviderSummary resolvido, nunca um por linha (ausência de N+1). */
+    @Test
+    void listMineResolvesProviderSummaryOnceForTheWholePage() {
+        when(providersApi.findProviderIdByUserId(providerUserId)).thenReturn(Optional.of(providerId));
+        ProposalRow proposalA = new ProposalRow(
+                proposalIdFixture(), requestId, providerId, 5000L, "EUR", "desc", 3, null, "SENT", Instant.now());
+        ProposalRow proposalB = new ProposalRow(
+                proposalIdFixture(), UUID.randomUUID(), providerId, 6000L, "EUR", "desc", 3, null, "SENT", Instant.now());
+        when(repository.findPageForProvider(eq(providerId), any(), any(), eq(21))).thenReturn(List.of(proposalA, proposalB));
+        when(providersApi.summary(providerId)).thenReturn(Optional.empty());
+
+        service.listMine(providerUserId, null, 20);
+
+        verify(providersApi, org.mockito.Mockito.times(1)).summary(providerId);
     }
 
     private static UUID proposalIdFixture() {

@@ -140,6 +140,122 @@ class PaymentsApiIntegrationTest {
     }
 
     @Test
+    void getMySubscriptionWithoutTokenReturns401() throws Exception {
+        mockMvc.perform(get("/v1/subscriptions/me"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void getMySubscriptionWithWrongRoleReturns403() throws Exception {
+        mockMvc.perform(get("/v1/subscriptions/me")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER"))))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void getMySubscriptionForAuthenticatedProviderWithoutProfileReturns404() throws Exception {
+        // Role PROVIDER no token, mas sem provider_profile correspondente na base
+        // (o ProviderAccountResolver não encontra nada) — o contrato só documenta
+        // 404 para este endpoint, não 422; tratado como "sem subscrição".
+        String keycloakSub = "kc-no-profile-" + UUID.randomUUID();
+
+        mockMvc.perform(get("/v1/subscriptions/me")
+                        .with(jwt().jwt(builder -> builder.subject(keycloakSub)).authorities(new SimpleGrantedAuthority("ROLE_PROVIDER"))))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.type").value("https://errors.servimatch.pt/not-found"));
+    }
+
+    @Test
+    void getMySubscriptionReturns404WhenProviderNeverSubscribed() throws Exception {
+        String keycloakSub = registerProvider();
+
+        mockMvc.perform(get("/v1/subscriptions/me")
+                        .with(jwt().jwt(builder -> builder.subject(keycloakSub)).authorities(new SimpleGrantedAuthority("ROLE_PROVIDER"))))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.type").value("https://errors.servimatch.pt/not-found"));
+    }
+
+    @Test
+    void getMySubscriptionReturnsMostRecentSubscriptionEvenWhenOnlyTerminalHistoryExists() throws Exception {
+        // Contrato: "subscrição mais recente ... em qualquer estado ... não só a
+        // ativa"; 404 é só para "nunca subscreveu". Um histórico só-terminal
+        // ainda é uma resposta 200 com esse estado, não 404.
+        UUID planId = TestDatabase.createPlan(jdbcClient, 4500);
+        String keycloakSub = registerProvider();
+        UUID providerId = providerIdFor(keycloakSub);
+        UUID subscriptionId = UUID.randomUUID();
+        jdbcClient.sql("""
+                        INSERT INTO subscription (id, provider_id, plan_id, status, gateway)
+                        VALUES (:id, :providerId, :planId, 'CANCELLED', 'stripe')
+                        """)
+                .param("id", subscriptionId).param("providerId", providerId).param("planId", planId).update();
+
+        mockMvc.perform(get("/v1/subscriptions/me")
+                        .with(jwt().jwt(builder -> builder.subject(keycloakSub)).authorities(new SimpleGrantedAuthority("ROLE_PROVIDER"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.id").value(subscriptionId.toString()));
+    }
+
+    @Test
+    void getMySubscriptionReturnsActiveSubscriptionWithPeriod() throws Exception {
+        UUID planId = TestDatabase.createPlan(jdbcClient, 4500);
+        String keycloakSub = registerProvider();
+        UUID providerId = providerIdFor(keycloakSub);
+        UUID subscriptionId = UUID.randomUUID();
+        jdbcClient.sql("""
+                        INSERT INTO subscription (id, provider_id, plan_id, status, gateway, current_period_start, current_period_end)
+                        VALUES (:id, :providerId, :planId, 'ACTIVE', 'stripe', now(), now() + interval '30 days')
+                        """)
+                .param("id", subscriptionId).param("providerId", providerId).param("planId", planId).update();
+
+        mockMvc.perform(get("/v1/subscriptions/me")
+                        .with(jwt().jwt(builder -> builder.subject(keycloakSub)).authorities(new SimpleGrantedAuthority("ROLE_PROVIDER"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.currentPeriodEnd").exists());
+    }
+
+    @Test
+    void getMySubscriptionReturnsPastDueSubscription() throws Exception {
+        UUID planId = TestDatabase.createPlan(jdbcClient, 4500);
+        String keycloakSub = registerProvider();
+        UUID providerId = providerIdFor(keycloakSub);
+        UUID subscriptionId = UUID.randomUUID();
+        jdbcClient.sql("""
+                        INSERT INTO subscription (id, provider_id, plan_id, status, gateway, current_period_start, current_period_end)
+                        VALUES (:id, :providerId, :planId, 'PAST_DUE', 'stripe', now() - interval '35 days', now() - interval '5 days')
+                        """)
+                .param("id", subscriptionId).param("providerId", providerId).param("planId", planId).update();
+
+        mockMvc.perform(get("/v1/subscriptions/me")
+                        .with(jwt().jwt(builder -> builder.subject(keycloakSub)).authorities(new SimpleGrantedAuthority("ROLE_PROVIDER"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PAST_DUE"));
+    }
+
+    private String registerProvider() {
+        String keycloakSub = "kc-api-me-" + UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        jdbcClient.sql("INSERT INTO users (id, keycloak_sub, email, display_name) VALUES (:id, :sub, :email, 'API Test')")
+                .param("id", userId).param("sub", keycloakSub).param("email", keycloakSub + "@example.test").update();
+        jdbcClient.sql("INSERT INTO provider_profile (id, user_id) VALUES (:id, :userId)")
+                .param("id", UUID.randomUUID()).param("userId", userId).update();
+        return keycloakSub;
+    }
+
+    private UUID providerIdFor(String keycloakSub) {
+        return jdbcClient.sql("""
+                        SELECT pp.id FROM provider_profile pp JOIN users u ON u.id = pp.user_id WHERE u.keycloak_sub = :sub
+                        """)
+                .param("sub", keycloakSub)
+                .query(UUID.class)
+                .single();
+    }
+
+    @Test
     void webhookWithInvalidSignatureReturns401ProblemDetails() throws Exception {
         String body = "{\"id\":\"evt_api_invalid\",\"type\":\"checkout.session.completed\",\"created\":" + Instant.now().getEpochSecond() + ",\"data\":{\"object\":{}}}";
 

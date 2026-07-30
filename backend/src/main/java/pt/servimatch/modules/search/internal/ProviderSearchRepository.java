@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import pt.servimatch.modules.billing.SubscriptionVisibilitySql;
 import pt.servimatch.modules.geo.CoverageSql;
 import pt.servimatch.modules.geo.GeoPoint;
 import pt.servimatch.modules.search.internal.dto.ProviderSummary;
@@ -13,7 +14,16 @@ import pt.servimatch.modules.search.internal.dto.ProviderSummary;
  * Consulta SQL nativa de {@code GET /v1/search/providers} (ADR-0004,
  * ADR-0005). Reutiliza {@link CoverageSql} para o filtro geográfico — a
  * mesma condição usada pelo predicado central de {@code matching}, sem a
- * duplicar.
+ * duplicar — e {@link SubscriptionVisibilitySql} para "esta subscrição
+ * concede visibilidade agora" (ADR-0011 §D4), pelo mesmo motivo: um único
+ * sítio para o literal de estados, nunca copiado à mão.
+ *
+ * <p><b>{@code visibility_state} não é lido aqui (ADR-0011 §D1).</b> Antes
+ * desta correção o {@code WHERE} incluía
+ * {@code p.visibility_state = 'VISIBLE'} — uma coluna sem nenhum escritor em
+ * produção que negava silenciosamente todo o predicado: nenhum prestador
+ * subscrito alguma vez aparecia em {@code GET /v1/search/providers}. Ver
+ * {@code pt.servimatch.gating.ProviderVisibilityWithoutBillingListenerIntegrationTest}.
  *
  * <p><b>Ordenação (determinística, critério de desempate explícito):</b>
  * {@code subscription_plan.ranking_boost DESC} (Premium primeiro, ADR
@@ -47,11 +57,10 @@ class ProviderSearchRepository {
                 FROM provider_profile p
                 JOIN users u ON u.id = p.user_id
                 LEFT JOIN company comp ON comp.id = p.company_id
-                JOIN subscription s ON s.provider_id = p.id AND s.status = 'ACTIVE'
+                JOIN subscription s ON s.provider_id = p.id AND %s
                 JOIN subscription_plan sp ON sp.id = s.plan_id
                 WHERE p.approval_status = 'APPROVED'
-                  AND p.visibility_state = 'VISIBLE'
-                """);
+                """.formatted(SubscriptionVisibilitySql.grantsVisibilityPredicate("s")));
         if (hasGeoFilter) {
             sql.append("  AND p.id IN (SELECT provider_id FROM candidates)\n");
         }
@@ -77,7 +86,8 @@ class ProviderSearchRepository {
                 .param("categoryId", categoryId, Types.OTHER)
                 .param("q", q, Types.VARCHAR)
                 .param("limit", limit)
-                .param("offset", offset);
+                .param("offset", offset)
+                .param("visibilityToleranceSeconds", SubscriptionVisibilitySql.DEFAULT_PERIOD_END_TOLERANCE_SECONDS);
         if (hasGeoFilter) {
             statement = statement
                     .param("lat", point == null ? null : point.lat(), Types.DOUBLE)

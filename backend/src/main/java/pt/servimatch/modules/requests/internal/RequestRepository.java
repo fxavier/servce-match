@@ -147,6 +147,51 @@ class RequestRepository {
         return spec.query(this::mapRow).list();
     }
 
+    /**
+     * Página ordenada por {@code created_at DESC, id DESC} (listMyRequests,
+     * {@code GET /v1/requests}). Filtro de dono <b>sempre em SQL</b>
+     * ({@code customer_id = :customerId}), nunca em memória (isolamento
+     * entre clientes — CLAUDE.md); {@code status} é um único valor já
+     * validado contra {@link pt.servimatch.modules.requests.ServiceRequestStatus}
+     * pelo chamador (um filtro inválido é 400 antes de chegar aqui, nunca
+     * uma cláusula que silenciosamente não bate com nada).
+     */
+    java.util.List<ServiceRequestRow> findPageForCustomer(UUID customerId, String status,
+                                                            CursorCodec.Position after, int limit) {
+        StringBuilder sql = new StringBuilder(SELECT_COLUMNS).append(" WHERE customer_id = :customerId ");
+        if (status != null) {
+            sql.append(" AND status = :status ");
+        }
+        if (after != null) {
+            sql.append(" AND (created_at, id) < (:afterCreatedAt, :afterId) ");
+        }
+        sql.append(" ORDER BY created_at DESC, id DESC LIMIT :limit ");
+        JdbcClient.StatementSpec spec = jdbcClient.sql(sql.toString())
+                .param("customerId", customerId)
+                .param("limit", limit);
+        if (status != null) {
+            spec = spec.param("status", status);
+        }
+        if (after != null) {
+            spec = spec.param("afterCreatedAt", java.sql.Timestamp.from(after.createdAt()))
+                    .param("afterId", after.id());
+        }
+        return spec.query(this::mapRow).list();
+    }
+
+    /**
+     * Títulos em lote para {@link pt.servimatch.modules.requests.RequestsApi#findTitlesByIds}
+     * — uma única consulta {@code WHERE id IN (:ids)}, nunca uma por id.
+     */
+    java.util.Map<UUID, String> findTitlesByIds(java.util.Collection<UUID> requestIds) {
+        return jdbcClient.sql("SELECT id, title FROM service_request WHERE id IN (:ids)")
+                .param("ids", requestIds)
+                .query((rs, rowNum) -> java.util.Map.entry((UUID) rs.getObject("id"), rs.getString("title")))
+                .list()
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(java.util.Map.Entry::getKey, java.util.Map.Entry::getValue));
+    }
+
     private ServiceRequestRow mapRow(ResultSet rs, int rowNum) throws SQLException {
         Double lat = (Double) rs.getObject("lat");
         Double lon = (Double) rs.getObject("lon");

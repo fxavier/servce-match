@@ -9,11 +9,17 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.ErrorResponseException;
 import pt.servimatch.modules.bookings.BookingStatus;
 import pt.servimatch.modules.bookings.BookingsApi;
+import pt.servimatch.modules.providers.ProvidersApi;
 import pt.servimatch.modules.reviews.internal.web.CreateReviewRequest;
 import pt.servimatch.modules.reviews.internal.web.ReviewDto;
+import pt.servimatch.modules.reviews.internal.web.ReviewWithAuthorPageDto;
+import pt.servimatch.modules.users.UsersApi;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,13 +38,17 @@ class ReviewsServiceTest {
     private ReviewRepository repository;
     @Mock
     private BookingsApi bookingsApi;
+    @Mock
+    private ProvidersApi providersApi;
+    @Mock
+    private UsersApi usersApi;
 
     private final UUID bookingId = UUID.randomUUID();
     private final UUID customerId = UUID.randomUUID();
     private final UUID providerUserId = UUID.randomUUID();
 
     private ReviewsService service() {
-        return new ReviewsService(repository, bookingsApi);
+        return new ReviewsService(repository, bookingsApi, providersApi, usersApi);
     }
 
     @Test
@@ -92,5 +102,52 @@ class ReviewsServiceTest {
         assertThatThrownBy(() -> service().create(customerId, request))
                 .isInstanceOfSatisfying(ErrorResponseException.class,
                         ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+    }
+
+    /**
+     * {@code listProviderReviews}: público, PII reduzida no servidor
+     * ({@code authorName} nunca é o {@code display_name} completo) e
+     * resolução em lote — um único {@code UsersApi#findByIds} para a
+     * página, nunca um {@code findById} por avaliação.
+     */
+    @Test
+    void listForProviderReducesAuthorNameAndResolvesInBatch() {
+        UUID providerId = UUID.randomUUID();
+        UUID reviewId = UUID.randomUUID();
+        when(providersApi.checkEligibility(providerId))
+                .thenReturn(Optional.of(new ProvidersApi.ProviderEligibility(providerId, true, true)));
+        when(providersApi.findUserIdByProviderId(providerId)).thenReturn(Optional.of(providerUserId));
+        when(repository.findPageByTarget(providerUserId, null, 21)).thenReturn(List.of(
+                new ReviewWithAuthorRow(reviewId, customerId, providerUserId, 5, "Excelente", Instant.now(), null)));
+        when(usersApi.findByIds(Set.of(customerId)))
+                .thenReturn(Map.of(customerId, new UsersApi.UserSummaryView(customerId, "Mariana Costa")));
+
+        ReviewWithAuthorPageDto result = service().listForProvider(providerId, null, 20);
+
+        assertThat(result.items()).hasSize(1);
+        assertThat(result.items().get(0).authorName()).isEqualTo("Mariana C.");
+        assertThat(result.items().get(0).authorName()).doesNotContain("Costa");
+        assertThat(result.items().get(0).authorAvatarSeed()).isEqualTo(customerId.toString());
+    }
+
+    @Test
+    void listForProviderReturnsNotFoundWhenProviderIsNotVisible() {
+        UUID providerId = UUID.randomUUID();
+        when(providersApi.checkEligibility(providerId))
+                .thenReturn(Optional.of(new ProvidersApi.ProviderEligibility(providerId, false, true)));
+
+        assertThatThrownBy(() -> service().listForProvider(providerId, null, 20))
+                .isInstanceOfSatisfying(ErrorResponseException.class,
+                        ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    @Test
+    void listForProviderReturnsNotFoundWhenProviderDoesNotExist() {
+        UUID providerId = UUID.randomUUID();
+        when(providersApi.checkEligibility(providerId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service().listForProvider(providerId, null, 20))
+                .isInstanceOfSatisfying(ErrorResponseException.class,
+                        ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
     }
 }

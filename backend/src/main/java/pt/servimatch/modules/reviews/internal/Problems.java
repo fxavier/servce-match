@@ -23,6 +23,10 @@ final class Problems {
         return of(HttpStatus.FORBIDDEN, ProblemType.FORBIDDEN, "Acesso negado", detail);
     }
 
+    static ErrorResponseException unprocessable(String detail) {
+        return of(HttpStatus.UNPROCESSABLE_ENTITY, ProblemType.VALIDATION, "Dados inválidos", detail);
+    }
+
     private static ErrorResponseException of(HttpStatus status, String type, String title, String detail) {
         return new ErrorResponseException(status, ProblemDetailsSupport.of(status, type, title, detail), null);
     }

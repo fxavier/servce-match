@@ -25,6 +25,7 @@ import pt.servimatch.modules.requests.internal.web.ServiceRequestDto;
 import pt.servimatch.modules.requests.internal.web.ServiceRequestPageDto;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -64,6 +65,14 @@ class RequestsService implements RequestsApi {
     @Override
     public Optional<RequestSummary> get(UUID requestId) {
         return repository.findById(requestId).map(this::toSummary);
+    }
+
+    @Override
+    public Map<UUID, String> findTitlesByIds(java.util.Collection<UUID> requestIds) {
+        if (requestIds.isEmpty()) {
+            return Map.of();
+        }
+        return repository.findTitlesByIds(requestIds);
     }
 
     @Override
@@ -131,7 +140,46 @@ class RequestsService implements RequestsApi {
         }
 
         ServiceRequestRow row = repository.findById(requestId).orElseThrow();
-        return toDto(row);
+        // Autor a criar o próprio rascunho: sempre morada exata.
+        return toDto(row, AddressExposure.EXACT);
+    }
+
+    /**
+     * {@code GET /v1/requests} — pedidos do cliente autenticado
+     * (ARQUITETURA §11.1). Dono resolvido a partir do {@code sub} do JWT
+     * pelo controlador; filtro por dono <b>sempre em SQL</b>
+     * ({@link RequestRepository#findPageForCustomer}), nunca em memória —
+     * isolamento entre clientes (CLAUDE.md/relatório de entrega). Morada
+     * sempre {@link AddressExposure#EXACT}: a página é sempre do próprio
+     * dono, nunca de outro cliente nem de um prestador.
+     *
+     * <p>{@code statusFilter} não reconhecido é {@code 400} ({@link
+     * Problems#badRequest}), nunca degradado para página vazia — uma lista
+     * vazia silenciosa faria o cliente acreditar que não tem pedidos.
+     */
+    public ServiceRequestPageDto listMine(UUID customerId, String statusFilter, String cursor, int limit) {
+        String status = parseStatusFilter(statusFilter);
+        CursorCodec.Position after = CursorCodec.decode(cursor).orElse(null);
+
+        List<ServiceRequestRow> rows = repository.findPageForCustomer(customerId, status, after, limit + 1);
+        boolean hasMore = rows.size() > limit;
+        List<ServiceRequestRow> page = hasMore ? rows.subList(0, limit) : rows;
+        String nextCursor = hasMore
+                ? CursorCodec.encode(page.get(page.size() - 1).createdAt(), page.get(page.size() - 1).id())
+                : null;
+
+        return new ServiceRequestPageDto(toDtoPage(page, AddressExposure.EXACT), new PageMetaDto(nextCursor));
+    }
+
+    private static String parseStatusFilter(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return ServiceRequestStatus.valueOf(raw).name();
+        } catch (IllegalArgumentException e) {
+            throw Problems.badRequest("Valor de 'status' inválido: '" + raw + "'.");
+        }
     }
 
     /**
@@ -151,10 +199,10 @@ class RequestsService implements RequestsApi {
                 .orElseThrow(() -> Problems.notFound("Pedido não encontrado."));
         boolean isOwner = row.customerId().equals(viewerUserId);
         if (isOwner || isAdmin) {
-            return toDto(row);
+            return toDto(row, AddressExposure.EXACT);
         }
         if (providerId != null && !"DRAFT".equals(row.status()) && isEligibleProvider(providerId, row)) {
-            return toDto(row);
+            return toDto(row, AddressExposure.ZONE);
         }
         throw Problems.forbidden("Sem permissão para ver este pedido.");
     }
@@ -181,7 +229,8 @@ class RequestsService implements RequestsApi {
                 published.latitude(), published.longitude(), published.addressRegionCode(),
                 Objects.requireNonNullElse(published.publishedAt(), Instant.now())));
 
-        return toDto(published);
+        // Dono a publicar o próprio pedido: sempre morada exata.
+        return toDto(published, AddressExposure.EXACT);
     }
 
     /**
@@ -202,6 +251,10 @@ class RequestsService implements RequestsApi {
      * categoria — uma página pode legitimamente devolver menos de
      * {@code limit} itens quando parte dos candidatos não é geograficamente
      * elegível.
+     *
+     * <p><b>Morada:</b> o viewer é sempre um prestador aqui — nunca o dono
+     * do pedido — por isso a página inteira é {@link AddressExposure#ZONE}
+     * (ver nota de auditoria em {@link #getForViewer}).
      */
     public ServiceRequestPageDto listInbox(UUID providerId, String statusFilter, String cursor, int limit) {
         Set<UUID> workedCategoryIds = providersApi.workedCategoryIds(providerId);
@@ -223,12 +276,9 @@ class RequestsService implements RequestsApi {
 
         Set<UUID> candidateIds = page.stream().map(ServiceRequestRow::id).collect(Collectors.toSet());
         Set<UUID> eligibleIds = matchingApi.filterEligibleRequestIds(providerId, candidateIds);
-        List<ServiceRequestDto> items = page.stream()
-                .filter(row -> eligibleIds.contains(row.id()))
-                .map(this::toDto)
-                .toList();
+        List<ServiceRequestRow> eligiblePage = page.stream().filter(row -> eligibleIds.contains(row.id())).toList();
 
-        return new ServiceRequestPageDto(items, new PageMetaDto(nextCursor));
+        return new ServiceRequestPageDto(toDtoPage(eligiblePage, AddressExposure.ZONE), new PageMetaDto(nextCursor));
     }
 
     // ---------------------------------------------------------------- mapeamento
@@ -237,18 +287,12 @@ class RequestsService implements RequestsApi {
         return new RequestSummary(row.id(), row.customerId(), row.categoryId(), ServiceRequestStatus.valueOf(row.status()));
     }
 
-    private ServiceRequestDto toDto(ServiceRequestRow row) {
+    private ServiceRequestDto toDto(ServiceRequestRow row, AddressExposure exposure) {
         CategoryDto category = categoriesApi.findById(row.categoryId())
                 .map(c -> new CategoryDto(c.id(), c.parentId(), c.slug(), c.name(), c.active()))
                 .orElse(null);
 
-        GeoPointDto location = row.latitude() != null && row.longitude() != null
-                ? new GeoPointDto(row.latitude(), row.longitude())
-                : null;
-        AddressDto address = new AddressDto(
-                row.addressLine1(), row.addressLine2(), row.addressPostalCode(), row.addressCity(),
-                row.addressRegionCode(), row.addressCountry(), location);
-
+        AddressDto address = exposure.apply(row);
         List<ImageRefDto> images = resolveImages(row.id());
 
         return new ServiceRequestDto(
@@ -260,12 +304,76 @@ class RequestsService implements RequestsApi {
     }
 
     /**
+     * Variante em página de {@link #toDto(ServiceRequestRow, AddressExposure)}
+     * usada por {@link #listMine} e {@link #listInbox}: resolve categorias e
+     * imagens para a página inteira em vez de por linha (CLAUDE.md — "nunca
+     * uma por pedido").
+     *
+     * <p>Imagens: uma única consulta a {@code request_image} para todos os
+     * {@code requestId} da página ({@link UploadAssetLinker#findByRequestIds})
+     * seguida de uma única chamada a {@link UploadsApi#resolve} para o
+     * conjunto de {@code imageId} de toda a página.
+     *
+     * <p>Categorias: {@link CategoriesApi} ainda não expõe um lote (só
+     * {@code findById} por id — achado, não decisão deliberada; ver
+     * relatório de entrega, "lacunas de contrato/API"). Como mitigação
+     * dentro deste módulo, a resolução é memorizada por {@code categoryId}
+     * <em>dentro desta chamada</em>: no pior caso (todas as linhas com
+     * categorias diferentes) continua a ser uma chamada por categoria
+     * distinta, nunca por linha — mas para o caso comum (poucas categorias
+     * na página) elimina a repetição. Uma consulta verdadeiramente única
+     * exige {@code CategoriesApi.findByIds(Set<UUID>)}, a pedir ao dono do
+     * módulo {@code categories}.
+     */
+    private List<ServiceRequestDto> toDtoPage(List<ServiceRequestRow> rows, AddressExposure exposure) {
+        if (rows.isEmpty()) {
+            return List.of();
+        }
+
+        Map<UUID, CategoryDto> categoriesById = new LinkedHashMap<>();
+        for (ServiceRequestRow row : rows) {
+            categoriesById.computeIfAbsent(row.categoryId(), id -> categoriesApi.findById(id)
+                    .map(c -> new CategoryDto(c.id(), c.parentId(), c.slug(), c.name(), c.active()))
+                    .orElse(null));
+        }
+
+        Set<UUID> requestIds = rows.stream().map(ServiceRequestRow::id).collect(Collectors.toSet());
+        Map<UUID, List<RequestImageRow>> imagesByRequest = uploadAssetLinker.findByRequestIds(requestIds);
+        Set<UUID> allImageAssetIds = imagesByRequest.values().stream()
+                .flatMap(List::stream)
+                .map(RequestImageRow::imageAssetId)
+                .collect(Collectors.toSet());
+        Map<UUID, ImageRef> resolvedImages = allImageAssetIds.isEmpty()
+                ? Map.of()
+                : uploadsApi.resolve(allImageAssetIds).stream().collect(Collectors.toMap(ImageRef::id, ref -> ref));
+
+        return rows.stream()
+                .map(row -> {
+                    AddressDto address = exposure.apply(row);
+                    List<ImageRefDto> images = imagesByRequest.getOrDefault(row.id(), List.of()).stream()
+                            .map(link -> resolvedImages.get(link.imageAssetId()))
+                            .filter(Objects::nonNull)
+                            .map(ref -> new ImageRefDto(ref.id(), ref.url(), ref.contentType()))
+                            .toList();
+                    return new ServiceRequestDto(
+                            row.id(), row.customerId(), categoriesById.get(row.categoryId()), row.title(), row.description(),
+                            address, row.urgency(), row.availability(), row.status(), images,
+                            null, row.createdAt(), row.publishedAt());
+                })
+                .toList();
+    }
+
+    /**
      * Resolve {@code request_image(request_id, image_asset_id, position)}
      * para URLs de leitura assinadas e frescas via {@code UploadsApi#resolve}
      * — nunca lendo {@code upload_asset} diretamente (ADR-0010, fechado
      * nesta onda). Junta de novo por {@code imageId}, preservando
      * {@code position}; {@code imageId} que {@code resolve} omitir (não
      * confirmado/expirado/desconhecido) fica de fora do resultado, sem erro.
+     *
+     * <p>Usado só pelos caminhos de item único ({@link #createDraft},
+     * {@link #getForViewer}, {@link #publish}); páginas usam
+     * {@link #toDtoPage} para evitar N+1.
      */
     private List<ImageRefDto> resolveImages(UUID requestId) {
         List<RequestImageRow> links = uploadAssetLinker.findByRequestId(requestId);

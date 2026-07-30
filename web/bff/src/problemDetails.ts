@@ -12,6 +12,7 @@ export interface ProblemDetailsBody {
   status: number;
   detail?: string;
   instance?: string;
+  [extensionMember: string]: unknown;
 }
 
 const PROBLEM_BASE = 'https://errors.servimatch.pt/';
@@ -22,12 +23,14 @@ export function sendProblem(
   slug: string,
   title: string,
   detail?: string,
+  extra?: Record<string, unknown>,
 ): void {
   const body: ProblemDetailsBody = {
     type: `${PROBLEM_BASE}${slug}`,
     title,
     status,
     ...(detail ? { detail } : {}),
+    ...(extra ?? {}),
   };
   res.status(status).type('application/problem+json').send(JSON.stringify(body));
 }

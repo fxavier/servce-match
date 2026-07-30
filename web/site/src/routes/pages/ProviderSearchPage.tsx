@@ -1,8 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { List, Map as MapIcon } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
-import { MapContainer, Marker, Popup, TileLayer } from 'react-leaflet';
 import { Seo } from '../../components/Seo';
 import { Chip } from '../../components/ui/Chip';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -13,18 +11,14 @@ import { Reveal } from '../../components/motion/Reveal';
 import { ProviderCard } from '../../features/providers/ProviderCard';
 import { getNextCursorParam } from '../../lib/cursor';
 import { toProblem } from '../../lib/problem';
-import { cn } from '../../lib/cn';
 import { services } from '../../services';
 import { useCategories } from '../../features/categories/useCategories';
 import { REGIONS } from '../../constants/regions';
-import 'leaflet/dist/leaflet.css';
 
-type SortOption = 'relevance' | 'rating' | 'distance';
-type ViewMode = 'list' | 'map';
+type SortOption = 'relevance' | 'rating';
 
 export function ProviderSearchPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [view, setView] = useState<ViewMode>('list');
   const { data: categories } = useCategories();
   const topLevelCategories = categories?.filter((category) => category.parentId === null) ?? [];
 
@@ -42,7 +36,12 @@ export function ProviderSearchPage() {
     setSearchParams(next);
   }
 
-  const queryKey = ['providers', 'search', { categoryId, regionCode, minRating, verifiedOnly, premiumOnly, sort }];
+  // `GET /v1/search/providers` só aceita categoryId/lat/lon/regionCode/q no
+  // contrato — sem `minRating`, `verifiedOnly`, `premiumOnly` nem `sort`
+  // (ver docs/api/openapi.yaml). Em vez de enviar parâmetros que o servidor
+  // ignoraria em silêncio, filtra-se e ordena-se do lado do cliente sobre
+  // os resultados reais já carregados — nunca se inventa um campo novo.
+  const queryKey = ['providers', 'search', { categoryId, regionCode }];
 
   const { data, isLoading, error, refetch, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey,
@@ -50,10 +49,6 @@ export function ProviderSearchPage() {
       services.providers.search({
         categoryId: categoryId || undefined,
         regionCode: regionCode || undefined,
-        minRating: minRating ? Number(minRating) : undefined,
-        verifiedOnly: verifiedOnly || undefined,
-        premiumOnly: premiumOnly || undefined,
-        sort,
         cursor: pageParam,
         limit: 9,
       }),
@@ -61,7 +56,21 @@ export function ProviderSearchPage() {
     getNextPageParam: getNextCursorParam,
   });
 
-  const providers = useMemo(() => data?.pages.flatMap((page) => page.items) ?? [], [data]);
+  const allProviders = useMemo(() => data?.pages.flatMap((page) => page.items) ?? [], [data]);
+
+  const providers = useMemo(() => {
+    const minRatingValue = minRating ? Number(minRating) : undefined;
+    const filtered = allProviders.filter((provider) => {
+      if (minRatingValue !== undefined && provider.ratingAvg < minRatingValue) return false;
+      if (verifiedOnly && !provider.verified) return false;
+      if (premiumOnly && !provider.premiumBadge) return false;
+      return true;
+    });
+    if (sort === 'rating') {
+      return [...filtered].sort((a, b) => b.ratingAvg - a.ratingAvg);
+    }
+    return filtered;
+  }, [allProviders, minRating, verifiedOnly, premiumOnly, sort]);
 
   const activeFilterCount = [categoryId, regionCode, minRating, verifiedOnly, premiumOnly].filter(Boolean).length;
 
@@ -130,28 +139,7 @@ export function ProviderSearchPage() {
           >
             <option value="relevance">Relevância</option>
             <option value="rating">Melhor avaliação</option>
-            <option value="distance">Mais próximo</option>
           </Select>
-          <div role="group" aria-label="Modo de visualização" className="inline-flex rounded-full border border-line p-1">
-            <button
-              type="button"
-              aria-pressed={view === 'list'}
-              onClick={() => setView('list')}
-              className={cn('inline-flex size-9 items-center justify-center rounded-full', view === 'list' && 'bg-orange-500 text-accent-fg')}
-            >
-              <List aria-hidden="true" className="size-4" strokeWidth={1.5} />
-              <span className="sr-only">Ver em lista</span>
-            </button>
-            <button
-              type="button"
-              aria-pressed={view === 'map'}
-              onClick={() => setView('map')}
-              className={cn('inline-flex size-9 items-center justify-center rounded-full', view === 'map' && 'bg-orange-500 text-accent-fg')}
-            >
-              <MapIcon aria-hidden="true" className="size-4" strokeWidth={1.5} />
-              <span className="sr-only">Ver no mapa</span>
-            </button>
-          </div>
         </div>
       </div>
 
@@ -169,24 +157,6 @@ export function ProviderSearchPage() {
             title="Sem prestadores para estes filtros"
             description={activeFilterCount > 0 ? 'Tente alargar os filtros escolhidos.' : 'Ainda não há prestadores disponíveis.'}
           />
-        ) : view === 'map' ? (
-          <div className="h-[520px] overflow-hidden rounded-lg border border-line">
-            <MapContainer center={[39.5, -8]} zoom={7} className="h-full w-full" scrollWheelZoom={false}>
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              {providers.map((provider) => (
-                <Marker key={provider.id} position={[provider.location.lat, provider.location.lon]}>
-                  <Popup>
-                    <strong>{provider.displayName}</strong>
-                    <br />
-                    {provider.headline}
-                  </Popup>
-                </Marker>
-              ))}
-            </MapContainer>
-          </div>
         ) : (
           <>
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">

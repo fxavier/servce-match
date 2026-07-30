@@ -41,11 +41,15 @@ export function ConversationsListPage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
                     <p className="truncate text-sm font-medium text-foreground">{conversation.counterpartName}</p>
-                    <p className="shrink-0 font-mono text-eyebrow tracking-[0.08em] text-muted">
-                      {formatRelativeTime(conversation.lastMessageAt).toUpperCase()}
-                    </p>
+                    {conversation.lastMessageAt ? (
+                      <p className="shrink-0 font-mono text-eyebrow tracking-[0.08em] text-muted">
+                        {formatRelativeTime(conversation.lastMessageAt).toUpperCase()}
+                      </p>
+                    ) : null}
                   </div>
-                  <p className="truncate text-caption text-muted">{conversation.lastMessagePreview}</p>
+                  <p className="truncate text-caption text-muted">
+                    {conversation.lastMessagePreview ?? 'Ainda sem mensagens — proposta aceite recentemente.'}
+                  </p>
                 </div>
                 {conversation.unreadCount > 0 ? (
                   <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-orange-500 text-xs font-medium text-accent-fg">

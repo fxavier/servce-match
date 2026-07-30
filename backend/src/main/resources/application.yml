@@ -3,9 +3,18 @@
 # Nenhum segredo aqui: tudo o que é sensível vem de variável de ambiente
 # (ver backend/.env.example). Perfis:
 #   - (nenhum / omissão) — single-instance (ADR-0006): rate limiting e
-#     idempotência em memória.
+#     idempotência em memória. Sem dados de demonstração: só migrações de
+#     referência (classpath:db/migration, abaixo) — é o perfil de produção.
 #   - multi-instance      — ativa Redis para rate limiting e idempotência
 #     (ver application-multi-instance.yml).
+#   - prod                — falha rápido se segredos reais não estiverem
+#     definidos (ver application-prod.yml, ProductionSecretsRequired).
+#   - local / dev          — acrescentam classpath:db/seed às locations do
+#     Flyway (dados de demonstração dev-only, ADR-0013 — ver
+#     application-local.yml/application-dev.yml e
+#     pt.servimatch.platform.seed.SeedLocationsGuard, que aborta o arranque
+#     se essas locations aparecerem sem um destes dois perfis ativo).
+#     NUNCA combinar com "prod".
 #
 # Ownership: pt.servimatch.platform / pt.servimatch.config (agente
 # backend-platform). Módulos de domínio não editam este ficheiro; pedem

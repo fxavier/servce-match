@@ -243,6 +243,34 @@
         <artifactId>spring-boot-maven-plugin</artifactId>
       </plugin>
       <!--
+        ADR-0013 D3, camada 1 (a barreira mecânica principal, não a de
+        conveniência): exclui `db/seed/**` — dados de demonstração dev-only
+        (ADR-0013) — do artefacto de produção. Um ficheiro que não existe no
+        JAR não corre, por muito que `SPRING_FLYWAY_LOCATIONS` ou um perfil
+        errado o peçam (essa é a camada 3,
+        pt.servimatch.platform.seed.SeedLocationsGuard).
+
+        Configurado no maven-jar-plugin (não em <resources> do <build>):
+        excluir por <resources> tiraria `db/seed` também de
+        `target/classes`, e é aí que `mvn spring-boot:run`/o arranque a
+        partir do IDE com o perfil `local` vai buscar os ficheiros — partia
+        exatamente o caso de uso que este seed serve. O
+        `spring-boot-maven-plugin` (goal `repackage`, acima) reembrulha o
+        JAR fino produzido por este plugin para o executável final; o que
+        aqui se exclui não reaparece no repackage — verificável com
+        `unzip -l target/servimatch-backend-*.jar | grep db/seed` (deve
+        devolver vazio).
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <configuration>
+          <excludes>
+            <exclude>db/seed/**</exclude>
+          </excludes>
+        </configuration>
+      </plugin>
+      <!--
         Convenção de nomenclatura de testes deste projeto: TUDO é *Test.java
         (Surefire, fase "test"), incluindo testes de integração pesados com
         Testcontainers (ex. PaymentsApiIntegrationTest,

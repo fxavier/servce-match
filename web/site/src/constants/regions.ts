@@ -8,13 +8,11 @@ export interface Region {
 
 /**
  * Concelhos reais com coordenadas aproximadas (WGS84). Isto **não** é dado
- * mock/fixture — é referência geográfica estática (como um enum), usada
- * pelo seletor de concelho em qualquer modo (mock ou HTTP real). O
- * contrato não expõe um endpoint `GET /v1/regions` (não há vocabulário
- * controlado de concelhos no backend); esta lista fica aqui, fora de
- * `services/mock/`, precisamente para não ser confundida com dado
- * trocável mock ↔ backend (checklist §11 — "nenhuma fixture importada
- * fora de services/").
+ * do servidor — é referência geográfica estática (como um enum), usada
+ * pelo seletor de concelho. O contrato não expõe um endpoint
+ * `GET /v1/regions` (não há vocabulário controlado de concelhos no
+ * backend); esta lista fica aqui, fora de `services/`, para não ser
+ * confundida com dado que vem do backend.
  */
 export const REGIONS: Region[] = [
   { code: 'PT-LIS', label: 'Lisboa', location: { lat: 38.7223, lon: -9.1393 } },

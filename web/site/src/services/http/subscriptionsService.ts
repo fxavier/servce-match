@@ -8,11 +8,16 @@ export const subscriptionsServiceHttp: SubscriptionsService = {
     if (error) throwProblem(error);
     return data;
   },
-  current() {
-    // Gap #3 — sem GET /v1/subscriptions/me; devolve "sem subscrição
-    // conhecida" em vez de inventar um estado. A UI trata isto como
-    // "por confirmar", nunca como PENDING/ACTIVE assumido no cliente.
-    return Promise.resolve(undefined);
+  async current() {
+    const { data, error, response } = await api.GET('/v1/subscriptions/me');
+    if (error) {
+      // 404 é o valor de domínio "nunca subscreveu" — deliberadamente sem
+      // `NONE` no enum (ver docs/api/openapi.yaml). Não deixar borbulhar
+      // como erro genérico.
+      if (response.status === 404) return undefined;
+      throwProblem(error);
+    }
+    return data;
   },
   async create(body) {
     const { data, error } = await api.POST('/v1/subscriptions', { body });

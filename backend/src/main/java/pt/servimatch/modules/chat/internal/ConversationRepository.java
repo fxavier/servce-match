@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.sql.Types;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -54,6 +55,59 @@ class ConversationRepository {
                 .param("providerId", providerId)
                 .query(UUID.class)
                 .single());
+    }
+
+    /**
+     * Página de {@code listConversations} para o participante autenticado —
+     * autorização feita <b>no WHERE</b>: só linhas onde {@code viewerId} é o
+     * {@code customer_id}, ou {@code viewerProviderId} (pode ser
+     * {@code null} se o autenticado não tiver perfil de prestador — a
+     * comparação com {@code NULL} nunca corresponde, o que exclui a
+     * segunda condição em vez de a filtrar depois de carregar) é o
+     * {@code provider_id}. Nenhuma linha de outro participante chega à
+     * aplicação.
+     *
+     * <p>Ordena por {@code COALESCE(last_message_at, created_at) DESC, id
+     * DESC} (V20) — desempate por {@code id} obrigatório: sem ele, duas
+     * conversas com exatamente o mesmo instante de atividade fariam o
+     * cursor saltar ou repetir uma linha (mesmo defeito documentado em
+     * {@link #findPage}). {@code unread_count} é uma subconsulta indexada
+     * por {@code idx_message_conversation_id_sent_at} (V9) sobre a marca de
+     * água por participante ({@code last_read_by_customer_at}/
+     * {@code last_read_by_provider_at}, V20) — nunca uma chamada por
+     * conversa a partir da aplicação.
+     */
+    List<ConversationSummaryRow> findPageForParticipant(UUID viewerId, UUID viewerProviderId, CursorCodec.Position after, int limit) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT c.id, c.request_id, c.customer_id, c.provider_id,
+                       c.last_message_at, c.last_message_preview,
+                       (SELECT count(*) FROM message m2
+                         WHERE m2.conversation_id = c.id
+                           AND m2.sender_id <> :viewerId
+                           AND m2.sent_at > COALESCE(
+                               CASE WHEN c.customer_id = :viewerId
+                                    THEN c.last_read_by_customer_at
+                                    ELSE c.last_read_by_provider_at END,
+                               '-infinity'::timestamptz)
+                       ) AS unread_count,
+                       COALESCE(c.last_message_at, c.created_at) AS sort_at
+                FROM conversation c
+                WHERE (c.customer_id = :viewerId OR c.provider_id = :viewerProviderId)
+                """);
+        if (after != null) {
+            sql.append(" AND (COALESCE(c.last_message_at, c.created_at), c.id) < (:afterSortAt, :afterId) ");
+        }
+        sql.append(" ORDER BY sort_at DESC, c.id DESC LIMIT :limit ");
+
+        JdbcClient.StatementSpec spec = jdbcClient.sql(sql.toString())
+                .param("viewerId", viewerId)
+                .param("viewerProviderId", viewerProviderId, Types.OTHER)
+                .param("limit", limit);
+        if (after != null) {
+            spec = spec.param("afterSortAt", Timestamp.from(after.sentAt()))
+                    .param("afterId", after.id());
+        }
+        return spec.query((rs, rowNum) -> mapConversationSummary(rs)).list();
     }
 
     Optional<ConversationRow> findById(UUID id) {
@@ -141,6 +195,19 @@ class ConversationRepository {
                         (UUID) rs.getObject("image_asset_id"),
                         rs.getInt("position")))
                 .list();
+    }
+
+    private static ConversationSummaryRow mapConversationSummary(ResultSet rs) throws SQLException {
+        Timestamp lastMessageAt = rs.getTimestamp("last_message_at");
+        return new ConversationSummaryRow(
+                (UUID) rs.getObject("id"),
+                (UUID) rs.getObject("request_id"),
+                (UUID) rs.getObject("customer_id"),
+                (UUID) rs.getObject("provider_id"),
+                lastMessageAt == null ? null : lastMessageAt.toInstant(),
+                rs.getString("last_message_preview"),
+                rs.getInt("unread_count"),
+                rs.getTimestamp("sort_at").toInstant());
     }
 
     private static ConversationRow mapConversation(ResultSet rs) throws SQLException {

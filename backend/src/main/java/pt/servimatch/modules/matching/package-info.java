@@ -8,8 +8,10 @@
  * — ver {@code docs/AGENTES.md} e {@code docs/ARQUITETURA.md} §10.
  *
  * <p>{@code allowedDependencies} fechado nesta revisão (Onda 1b,
- * {@code backend-platform}), a partir dos imports reais: só {@code geo}
- * (predicado de cobertura, {@code GeoPoint}/{@code CoverageSql}). Nota: o
+ * {@code backend-platform}), a partir dos imports reais: {@code geo}
+ * (predicado de cobertura, {@code GeoPoint}/{@code CoverageSql}) e
+ * {@code billing} — compor a elegibilidade do prestador a partir do estado
+ * da subscrição, em vez de copiar o predicado. Nota: o
  * {@code @ApplicationModuleListener} de {@code RequestPublished} descrito
  * acima ainda não existe no código (só {@code isEligible}/
  * {@code findEligibleProviderIds}/{@code filterEligibleRequestIds}
@@ -18,6 +20,6 @@
  */
 @org.springframework.modulith.ApplicationModule(
         displayName = "Matching",
-        allowedDependencies = {"modules.geo"}
+        allowedDependencies = {"modules.geo", "modules.billing"}
 )
 package pt.servimatch.modules.matching;

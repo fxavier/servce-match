@@ -1,29 +1,42 @@
 /**
  * Billing — planos de subscrição e ciclo de vida da subscrição do
  * prestador ({@code PENDING → ACTIVE → PAST_DUE/EXPIRED → CANCELLED}).
- * {@code visibility_state} do prestador deriva do estado da subscrição.
  *
  * <p>Implementado pelo agente {@code backend-payments} (ver
  * {@code docs/AGENTES.md} e {@code docs/ARQUITETURA.md} §12). Este ficheiro,
  * tal como o de qualquer outro módulo, é escrito exclusivamente pelo agente
- * {@code backend-platform} (CLAUDE.md §3) — {@code backend-payments}
- * criou-o antes de essa regra estar em vigor; esta revisão assume-o, sem
- * alterações de fundo.
+ * {@code backend-platform} (CLAUDE.md §3).
  *
- * <p><b>{@code allowedDependencies} vazio, por agora.</b>
- * {@code ARQUITETURA.md} §6.3 lista {@code subscriptions} (=este módulo,
- * {@code billing}) como dependente de {@code providers}. Na prática,
- * {@code billing.internal.JdbcProviderAccountResolver} já documenta esse
- * mesmo facto (javadoc do próprio ficheiro: resolve
- * {@code sub Keycloak → provider_profile.id} lendo diretamente as tabelas
- * {@code users}/{@code provider_profile} em SQL bruto, como atalho
- * enquanto os módulos {@code users}/{@code providers} não existiam neste
- * worktree). Esses módulos existem agora neste monólito integrado — mas
- * trocar o SQL bruto por {@code UsersApi}/{@code ProvidersApi} é uma
- * alteração ao código de {@code billing}, fora do âmbito de escrita deste
- * agente (só o {@code package-info.java}). Pedido ao agente
- * {@code backend-payments}: ao fazer essa troca, pedir aqui a adição de
- * {@code "providers"} (e/ou {@code "users"}) a {@code allowedDependencies}.
+ * <p><b>{@code allowedDependencies} vazio — decidido, não pendente
+ * (ADR-0011 D8).</b> O pedido histórico de adicionar {@code providers}
+ * (e/ou {@code users}), registado numa revisão anterior por causa de
+ * {@code billing.internal.JdbcProviderAccountResolver}
+ * ({@code ProviderAccountResolver}: resolve {@code sub Keycloak →
+ * provider_profile.id} lendo diretamente {@code users}/
+ * {@code provider_profile} em SQL bruto, nunca autorizado pelo ADR-0010 —
+ * não é uma consulta <em>set-based</em>), fica <b>recusado com
+ * fundamento</b>: o ADR-0011 (Racional, D8) verificou que o único
+ * consumidor de {@code ProviderAccountResolver} é
+ * {@code payments.web.SubscriptionController}, e nenhuma lógica de domínio
+ * de {@code billing} precisa dele. A resolução de identidade não é uma
+ * capacidade de {@code billing} — é composição de {@code UsersApi} +
+ * {@code ProvidersApi}, que já vive corretamente do lado de
+ * {@code payments} (ver {@code payments.package-info}).
+ *
+ * <p><b>Trabalho pendente, fora deste ficheiro:</b>
+ * {@code ProviderAccountResolver} e {@code JdbcProviderAccountResolver}
+ * saem de {@code billing}; {@code SubscriptionController} passa a resolver
+ * {@code sub → providerId} com {@code UsersApi.ensureProvisioned} +
+ * {@code ProvidersApi.findProviderIdByUserId}. Código de
+ * {@code backend-payments}, fora do âmbito de escrita deste agente.
+ *
+ * <p><b>Direção fixada, sem ciclo:</b> {@code billing → {}};
+ * {@code providers → {users, billing}} (ver {@code providers.package-info});
+ * {@code payments → {billing, providers, users}} (ver
+ * {@code payments.package-info}). Se um dia {@code billing} precisar mesmo
+ * de {@code providers}, o caminho é um evento ou uma inversão por
+ * interface — nunca a reabertura direta, que fecharia um ciclo com
+ * {@code providers → billing} já em vigor.
  *
  * <p>Convenção de eventos de domínio (decisão da onda anterior, ver também
  * {@code pt.servimatch.modules.chat.package-info}): eventos consumidos por

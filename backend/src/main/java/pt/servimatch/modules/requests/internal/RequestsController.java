@@ -65,6 +65,16 @@ class RequestsController {
         return ResponseEntity.created(location).body(created);
     }
 
+    @GetMapping("/v1/requests")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    ServiceRequestPageDto listMyRequests(Authentication authentication,
+                                          @RequestParam(required = false) String status,
+                                          @RequestParam(required = false) String cursor,
+                                          @RequestParam(required = false, defaultValue = "20") int limit) {
+        UUID customerId = usersApi.ensureProvisioned(jwt(authentication));
+        return requestsService.listMine(customerId, status, cursor, Math.min(Math.max(limit, 1), 100));
+    }
+
     @GetMapping("/v1/requests/{requestId}")
     ServiceRequestDto getRequest(Authentication authentication, @PathVariable UUID requestId) {
         UUID viewerId = usersApi.ensureProvisioned(jwt(authentication));

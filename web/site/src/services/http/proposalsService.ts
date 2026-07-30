@@ -1,7 +1,6 @@
 import { throwProblem } from '../../lib/problem';
 import { api } from '../http';
 import type { ProposalsService } from '../interfaces';
-import { notImplementedInContract } from './notImplemented';
 
 export const proposalsServiceHttp: ProposalsService = {
   async listForRequest(requestId, params) {
@@ -11,9 +10,15 @@ export const proposalsServiceHttp: ProposalsService = {
     if (error) throwProblem(error);
     return data;
   },
-  listMine() {
-    // Gap #7 — sem endpoint "as minhas propostas" (prestador) no contrato.
-    return notImplementedInContract('lista das minhas propostas enviadas');
+  async listMine(params) {
+    // GET /v1/proposals/me não aceita filtro por `status` no contrato — só
+    // `limit`/`cursor`. Não se inventa aqui um parâmetro que o servidor
+    // ignoraria silenciosamente.
+    const { data, error } = await api.GET('/v1/proposals/me', {
+      params: { query: { limit: params?.limit, cursor: params?.cursor } },
+    });
+    if (error) throwProblem(error);
+    return data;
   },
   async create(requestId, body) {
     const { data, error } = await api.POST('/v1/requests/{requestId}/proposals', {

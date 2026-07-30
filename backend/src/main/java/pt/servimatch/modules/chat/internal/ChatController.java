@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import pt.servimatch.modules.chat.internal.web.ConversationPageDto;
 import pt.servimatch.modules.chat.internal.web.CreateMessageRequest;
 import pt.servimatch.modules.chat.internal.web.MessageDto;
 import pt.servimatch.modules.chat.internal.web.MessagePageDto;
@@ -39,6 +40,14 @@ class ChatController {
     ChatController(ChatService chatService, UsersApi usersApi) {
         this.chatService = chatService;
         this.usersApi = usersApi;
+    }
+
+    @GetMapping("/v1/conversations")
+    ConversationPageDto listConversations(Authentication authentication,
+                                           @RequestParam(required = false) String cursor,
+                                           @RequestParam(required = false, defaultValue = "20") int limit) {
+        UUID viewerId = usersApi.ensureProvisioned(jwt(authentication));
+        return chatService.listConversations(viewerId, cursor, Math.min(Math.max(limit, 1), 100));
     }
 
     @GetMapping("/v1/conversations/{conversationId}/messages")

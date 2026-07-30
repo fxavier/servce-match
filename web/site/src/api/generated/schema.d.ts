@@ -123,7 +123,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Listar os meus pedidos
+         * @description Pedidos do cliente autenticado, mais recentes primeiro. **Role:**
+         *     `CUSTOMER`. Filtro opcional por `status`.
+         */
+        get: operations["listMyRequests"];
         put?: never;
         /**
          * Criar pedido (DRAFT)
@@ -223,6 +228,103 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/proposals/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar as minhas propostas
+         * @description Propostas enviadas pelo prestador autenticado, mais recentes
+         *     primeiro. **Role:** `PROVIDER`.
+         */
+        get: operations["listMyProposals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/providers/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Obter o meu perfil de prestador
+         * @description Perfil completo do prestador autenticado, para o ecrã de edição
+         *     (`/pro/perfil`). **Role:** `PROVIDER`.
+         */
+        get: operations["getMyProviderProfile"];
+        /**
+         * Substituir o meu perfil de prestador
+         * @description Substituição **total** do perfil editável (categorias, zonas,
+         *     portfólio, headline, bio) — as listas do corpo descrevem o estado
+         *     final, não um incremento. **Role:** `PROVIDER`.
+         */
+        put: operations["updateMyProviderProfile"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/providers/{providerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Perfil público do prestador
+         * @description Perfil público completo do prestador, para a página
+         *     `/prestadores/{id}` (indexável — ver `Seo.tsx`/`sitemap.xml`).
+         *     Público, não requer autenticação. Devolve `404` se o prestador não
+         *     existir ou não estiver visível (subscrição inativa ou não aprovado —
+         *     mesmo predicado usado em `GET /v1/search/providers`).
+         */
+        get: operations["getProvider"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/providers/{providerId}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Avaliações do prestador
+         * @description Avaliações recebidas pelo prestador, mais recentes primeiro.
+         *     Público, não requer autenticação (a página de perfil é indexável).
+         *     `authorName` é **PII reduzida**: primeiro nome mais inicial do
+         *     apelido (ex. "Mariana C."), calculada no **servidor** a partir do
+         *     `display_name` completo de `users` — este endpoint público nunca
+         *     expõe o nome completo do autor. Ver `ReviewWithAuthor`.
+         */
+        get: operations["listProviderReviews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/providers/me/requests": {
         parameters: {
             query?: never;
@@ -265,6 +367,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar as minhas conversas
+         * @description Conversas do autenticado (cliente ou prestador), mais recente
+         *     primeiro.
+         */
+        get: operations["listConversations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/conversations/{conversationId}/messages": {
         parameters: {
             query?: never;
@@ -284,6 +407,27 @@ export interface paths {
          *     precisa de **subscrição ativa** para iniciar/participar em novas conversas.
          */
         post: operations["sendMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/bookings/{bookingId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Detalhe da marcação
+         * @description Detalhe de uma `Booking`, para o ecrã de avaliação. **Autorização:**
+         *     só o cliente ou o prestador da marcação; `403` caso contrário.
+         */
+        get: operations["getBooking"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -373,6 +517,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/subscriptions/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Estado da minha subscrição
+         * @description Subscrição mais recente do prestador autenticado, em **qualquer**
+         *     estado (`PENDING`, `ACTIVE`, `PAST_DUE`, `EXPIRED`, `CANCELLED` —
+         *     não só a ativa). **Role:** `PROVIDER`. Devolve `404` quando o
+         *     prestador **nunca** subscreveu nenhum plano — deliberadamente não um
+         *     valor `NONE` do enum: acrescentar um valor novo a `SubscriptionStatus`
+         *     (já publicado) parte qualquer `switch`/`when` exaustivo em clientes já
+         *     instalados, e o modo de falha típico desse `switch` cai precisamente
+         *     no *gating* de subscrição que este endpoint serve.
+         */
+        get: operations["getMySubscription"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/webhooks/payments/{gateway}": {
         parameters: {
             query?: never;
@@ -392,6 +563,28 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/providers/{providerId}/approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Decidir aprovação do prestador
+         * @description Regista a decisão administrativa sobre a elegibilidade de operação do prestador
+         *     (`approval_status`). Transições válidas: `PENDING → APPROVED`, `PENDING → REJECTED`,
+         *     `APPROVED → SUSPENDED`; qualquer outra devolve `409`. **Role:** `ADMIN`.
+         */
+        patch: operations["decideProviderApproval"];
         trace?: never;
     };
 }
@@ -631,6 +824,55 @@ export interface components {
             /** Format: uri */
             avatarUrl?: string | null;
         };
+        /** @description Zona de cobertura do prestador expressa por região administrativa. */
+        ProviderZone: {
+            /** @description Código de região administrativa (concelho/distrito). */
+            regionCode: string;
+            /** @description Nome apresentável da região. */
+            label: string;
+        };
+        /** @description Contagem de avaliações por número de estrelas (1 a 5). */
+        RatingDistribution: {
+            1: number;
+            2: number;
+            3: number;
+            4: number;
+            5: number;
+        };
+        /**
+         * @description Perfil público completo do prestador. Estende `ProviderSummary`
+         *     (usado em pesquisa e propostas) com os dados da página de perfil
+         *     (`/prestadores/{id}`, indexável). Devolvido por
+         *     `GET /v1/providers/{providerId}` e, para o próprio prestador, por
+         *     `GET`/`PUT /v1/providers/me`.
+         */
+        ProviderProfile: components["schemas"]["ProviderSummary"] & {
+            bio: string;
+            categoryNames: string[];
+            zones: components["schemas"]["ProviderZone"][];
+            location: components["schemas"]["GeoPoint"];
+            ratingDistribution: components["schemas"]["RatingDistribution"];
+            portfolioImageUrls: string[];
+            /** Format: date-time */
+            memberSince: string;
+        };
+        /**
+         * @description Corpo de `PUT /v1/providers/me`. Substituição **total**: as listas
+         *     (`categoryIds`, `regionCodes`, `portfolioImageIds`) descrevem o
+         *     estado final, não um incremento — omitir um valor existente remove-o.
+         */
+        UpdateProviderProfile: {
+            headline: string;
+            bio?: string;
+            categoryIds: string[];
+            /** @description Zonas de cobertura por região administrativa (modo `ADMIN_REGION`). */
+            regionCodes: string[];
+            /**
+             * @description IDs de imagens previamente carregadas com `purpose: PROVIDER_PORTFOLIO`
+             *     (`POST /v1/uploads`).
+             */
+            portfolioImageIds: string[];
+        };
         CreateMessage: {
             body: string;
             attachmentIds?: string[];
@@ -649,6 +891,23 @@ export interface components {
             /** Format: date-time */
             readAt?: string | null;
         };
+        /** @description Item de `GET /v1/conversations` — resumo para a lista de conversas do autenticado. */
+        ConversationSummary: {
+            /** Format: uuid */
+            id: string;
+            counterpartName: string;
+            /** @description Semente determinística para gerar um avatar genérico (não é uma foto real). */
+            counterpartAvatarSeed: string;
+            /** @description null quando a conversa ainda não tem nenhuma mensagem (existe desde a proposta aceite). */
+            lastMessagePreview: string | null;
+            /**
+             * Format: date-time
+             * @description null quando a conversa ainda não tem nenhuma mensagem.
+             */
+            lastMessageAt: string | null;
+            unreadCount: number;
+            requestTitle: string;
+        };
         Booking: {
             /** Format: uuid */
             id: string;
@@ -662,6 +921,30 @@ export interface components {
             status: "CONFIRMED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "NO_SHOW";
             /** Format: date-time */
             completedAt?: string | null;
+        };
+        /**
+         * @description Detalhe de uma `Booking`, para o ecrã de avaliação
+         *     (`GET /v1/bookings/{bookingId}`). Estende `Booking` com o `users.id`
+         *     da contraparte: `targetId` em `POST /v1/reviews` é um `users.id`, mas
+         *     `Proposal.providerId` é um `provider_profile.id` — sem
+         *     `counterpartUserId` não é possível preencher `targetId` a partir
+         *     desta resposta do lado do prestador (defeito assimétrico, invisível
+         *     em teste manual do lado do cliente).
+         */
+        BookingDetail: components["schemas"]["Booking"] & {
+            requestTitle: string;
+            /**
+             * Format: uuid
+             * @description `users.id` da contraparte (o cliente, se o autenticado for o
+             *     prestador; o prestador, se o autenticado for o cliente).
+             */
+            counterpartUserId: string;
+            counterpartName: string;
+            /**
+             * @description Se o autenticado ainda pode submeter uma avaliação para esta
+             *     marcação (`COMPLETED` e ainda não avaliada por si).
+             */
+            canReview: boolean;
         };
         CreateReview: {
             /** Format: uuid */
@@ -687,6 +970,42 @@ export interface components {
             comment?: string;
             /** Format: date-time */
             createdAt: string;
+        };
+        /**
+         * @description Avaliação pública com autor **PII-reduzido**: `authorName` é o
+         *     primeiro nome mais a inicial do apelido (ex. "Mariana C."), calculado
+         *     no **servidor** a partir do `display_name` completo de `users` —
+         *     `GET /v1/providers/{providerId}/reviews` é público e indexável, o
+         *     nome completo do autor nunca é exposto aqui.
+         */
+        ReviewWithAuthor: {
+            /** Format: uuid */
+            id: string;
+            /** @example Mariana C. */
+            authorName: string;
+            /** @description Semente determinística para gerar um avatar genérico (não é uma foto real). */
+            authorAvatarSeed: string;
+            /**
+             * Format: uuid
+             * @description Utilizador avaliado (users.id do prestador).
+             */
+            targetId: string;
+            rating: number;
+            comment?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /**
+             * @description Resposta pública do prestador à avaliação. **Nullable por
+             *     desenho**: a coluna `review.provider_response` ainda não existe
+             *     na migração `V10__bookings_and_reviews.sql` — este campo fica
+             *     `null` até essa coluna ser acrescentada pelo `db-migrations`.
+             *     Nenhum cliente deve assumir que virá sempre preenchido.
+             */
+            providerResponse?: string | null;
+        };
+        ReviewWithAuthorPage: {
+            items: components["schemas"]["ReviewWithAuthor"][];
+            page: components["schemas"]["PageMeta"];
         };
         SubscriptionPlan: {
             /** Format: uuid */
@@ -749,6 +1068,41 @@ export interface components {
             currentPeriodEnd?: string;
             cancelAtPeriodEnd?: boolean;
         };
+        /**
+         * @description Estado de aprovação do prestador (`approval_status`). `PENDING` é o valor inicial;
+         *     as restantes transições só se atingem por decisão administrativa
+         *     (`PATCH /v1/admin/providers/{providerId}/approval`).
+         * @enum {string}
+         */
+        ProviderApprovalStatus: "PENDING" | "APPROVED" | "REJECTED" | "SUSPENDED";
+        /**
+         * @description Valores atribuíveis pela decisão administrativa. `PENDING` nunca é um destino.
+         * @enum {string}
+         */
+        ProviderApprovalDecision: "APPROVED" | "REJECTED" | "SUSPENDED";
+        /** @description Transições válidas: `PENDING → APPROVED`, `PENDING → REJECTED`, `APPROVED → SUSPENDED`. */
+        UpdateProviderApproval: {
+            decision: components["schemas"]["ProviderApprovalDecision"];
+            /**
+             * @description Motivo da decisão. **Obrigatório** quando `decision` é `REJECTED` ou `SUSPENDED`
+             *     (a ausência devolve `422`); opcional para `APPROVED`.
+             */
+            reason?: string;
+        };
+        /** @description Resultado da decisão administrativa sobre a elegibilidade de operação do prestador. */
+        ProviderApproval: {
+            /** Format: uuid */
+            providerId: string;
+            approvalStatus: components["schemas"]["ProviderApprovalStatus"];
+            reason?: string | null;
+            /**
+             * Format: uuid
+             * @description Identificador do administrador (`ROLE_ADMIN`) que tomou a decisão.
+             */
+            decidedBy: string;
+            /** Format: date-time */
+            decidedAt: string;
+        };
         PageMeta: {
             /** @description null quando não há mais páginas. */
             nextCursor: string | null;
@@ -767,6 +1121,10 @@ export interface components {
         };
         MessagePage: {
             items: components["schemas"]["Message"][];
+            page: components["schemas"]["PageMeta"];
+        };
+        ConversationPage: {
+            items: components["schemas"]["ConversationSummary"][];
             page: components["schemas"]["PageMeta"];
         };
     };
@@ -820,6 +1178,7 @@ export interface components {
     parameters: {
         RequestId: string;
         ConversationId: string;
+        ProviderId: string;
         /** @description Número máximo de itens por página. */
         Limit: number;
         /** @description Cursor opaco devolvido em `nextCursor`. */
@@ -976,6 +1335,34 @@ export interface operations {
                 };
             };
             422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    listMyRequests: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["RequestStatus"];
+                /** @description Número máximo de itens por página. */
+                limit?: components["parameters"]["Limit"];
+                /** @description Cursor opaco devolvido em `nextCursor`. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de pedidos. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceRequestPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
         };
     };
     createRequest: {
@@ -1188,6 +1575,147 @@ export interface operations {
             };
         };
     };
+    listMyProposals: {
+        parameters: {
+            query?: {
+                /** @description Número máximo de itens por página. */
+                limit?: components["parameters"]["Limit"];
+                /** @description Cursor opaco devolvido em `nextCursor`. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de propostas. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    getMyProviderProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Perfil do prestador. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderProfile"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateMyProviderProfile: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Chave para tornar o `POST` idempotente (repetições devolvem o mesmo resultado). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProviderProfile"];
+            };
+        };
+        responses: {
+            /** @description Perfil atualizado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderProfile"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Sem permissão. Inclui o caso de o autenticado não ser `PROVIDER`. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["UnprocessableEntity"];
+        };
+    };
+    getProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                providerId: components["parameters"]["ProviderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Perfil do prestador. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderProfile"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listProviderReviews: {
+        parameters: {
+            query?: {
+                /** @description Número máximo de itens por página. */
+                limit?: components["parameters"]["Limit"];
+                /** @description Cursor opaco devolvido em `nextCursor`. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path: {
+                providerId: components["parameters"]["ProviderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de avaliações. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewWithAuthorPage"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
     listProviderInbox: {
         parameters: {
             query?: {
@@ -1259,6 +1787,32 @@ export interface operations {
             400: components["responses"]["BadRequest"];
         };
     };
+    listConversations: {
+        parameters: {
+            query?: {
+                /** @description Número máximo de itens por página. */
+                limit?: components["parameters"]["Limit"];
+                /** @description Cursor opaco devolvido em `nextCursor`. */
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Página de conversas. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
     listMessages: {
         parameters: {
             query?: {
@@ -1317,6 +1871,31 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    getBooking: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bookingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Marcação. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookingDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     completeBooking: {
@@ -1443,6 +2022,37 @@ export interface operations {
             422: components["responses"]["UnprocessableEntity"];
         };
     };
+    getMySubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Subscrição mais recente do prestador autenticado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Subscription"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description O prestador autenticado nunca subscreveu nenhum plano. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     paymentWebhook: {
         parameters: {
             query?: never;
@@ -1478,6 +2088,49 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
+        };
+    };
+    decideProviderApproval: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Chave para tornar o `POST` idempotente (repetições devolvem o mesmo resultado). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                providerId: components["parameters"]["ProviderId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProviderApproval"];
+            };
+        };
+        responses: {
+            /** @description Decisão aplicada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderApproval"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Transição inválida para o `approval_status` atual do prestador. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            422: components["responses"]["UnprocessableEntity"];
         };
     };
 }

@@ -21,6 +21,7 @@ const FaqPage = lazy(() => import('./pages/FaqPage').then((m) => ({ default: m.F
 const TermsPage = lazy(() => import('./pages/LegalPage').then((m) => ({ default: m.TermsPage })));
 const PrivacyPage = lazy(() => import('./pages/LegalPage').then((m) => ({ default: m.PrivacyPage })));
 const LoginPage = lazy(() => import('./pages/LoginPage').then((m) => ({ default: m.LoginPage })));
+const RegisterPage = lazy(() => import('./pages/RegisterPage').then((m) => ({ default: m.RegisterPage })));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
 
 const NewRequestWizardPage = lazy(() => import('./pages/NewRequestWizardPage').then((m) => ({ default: m.NewRequestWizardPage })));
@@ -64,6 +65,7 @@ export function AppRouter() {
           <Route path="termos" element={<TermsPage />} />
           <Route path="privacidade" element={<PrivacyPage />} />
           <Route path="entrar" element={<LoginPage />} />
+          <Route path="registar" element={<RegisterPage />} />
           <Route path="pedidos/novo" element={<NewRequestWizardPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>

@@ -6,14 +6,29 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import pt.servimatch.modules.billing.SubscriptionVisibilitySql;
 import pt.servimatch.modules.geo.CoverageSql;
 import pt.servimatch.modules.geo.GeoPoint;
 
 /**
- * Acesso SQL nativo ao predicado de elegibilidade (ADR-0004 §10.3). Consulta
- * diretamente as tabelas de {@code providers} e {@code subscriptions}
- * (esquema partilhado, sem importar classes Java desses módulos — ver
- * {@code docs/adr/} e a nota de "SQL nativo" no relatório da tarefa).
+ * Acesso SQL nativo ao predicado de elegibilidade (ADR-0004 §10.3, composto
+ * com P1 do ADR-0011 §D2/§D4). Consulta diretamente as tabelas de
+ * {@code providers} e {@code subscriptions} (esquema partilhado, sem
+ * importar classes Java de {@code providers} — ver {@code docs/adr/} e a
+ * nota de "SQL nativo" no relatório da tarefa); a exceção deliberada é
+ * {@link SubscriptionVisibilitySql}, que não é uma leitura de esquema mas o
+ * fragmento único e reutilizável do predicado "esta subscrição concede
+ * visibilidade agora" (ADR-0011 §D4) — consumi-lo aqui, em vez de copiar o
+ * literal de estados, é precisamente o que a decisão exige.
+ *
+ * <p><b>{@code visibility_state} não é lido aqui (ADR-0011 §D1).</b> Antes
+ * desta correção o {@code WHERE} incluía
+ * {@code p.visibility_state = 'VISIBLE'} — uma coluna sem nenhum escritor em
+ * produção (sempre {@code 'HIDDEN'}, o {@code DEFAULT} da V4) que negava
+ * silenciosamente todo o predicado de elegibilidade: nenhum prestador,
+ * subscrito ou não, alguma vez passava. Ver
+ * {@code pt.servimatch.gating.ProviderVisibilityWithoutBillingListenerIntegrationTest}
+ * para a reprodução.
  */
 @Repository
 class EligibilityRepository {
@@ -33,16 +48,15 @@ class EligibilityRepository {
             FROM candidates c
             JOIN provider_profile p ON p.id = c.provider_id
             WHERE p.approval_status = 'APPROVED'
-              AND p.visibility_state = 'VISIBLE'
               AND EXISTS (
                     SELECT 1 FROM subscription s
-                    WHERE s.provider_id = p.id AND s.status = 'ACTIVE'
+                    WHERE s.provider_id = p.id AND %s
                   )
               AND EXISTS (
                     SELECT 1 FROM provider_category pc
                     WHERE pc.provider_id = p.id AND pc.category_id = :categoryId::uuid
                   )
-            """.formatted(CoverageSql.CANDIDATE_PROVIDER_IDS_CTE);
+            """.formatted(CoverageSql.CANDIDATE_PROVIDER_IDS_CTE, SubscriptionVisibilitySql.grantsVisibilityPredicate("s"));
 
     private final JdbcClient jdbcClient;
 
@@ -63,10 +77,9 @@ class EligibilityRepository {
                     FROM provider_profile p
                     WHERE p.id = :providerId::uuid
                       AND p.approval_status = 'APPROVED'
-                      AND p.visibility_state = 'VISIBLE'
                       AND EXISTS (
                             SELECT 1 FROM subscription s
-                            WHERE s.provider_id = p.id AND s.status = 'ACTIVE'
+                            WHERE s.provider_id = p.id AND %s
                           )
                       AND EXISTS (
                             SELECT 1 FROM provider_category pc
@@ -82,13 +95,14 @@ class EligibilityRepository {
                               )
                           )
                 )
-                """;
+                """.formatted(SubscriptionVisibilitySql.grantsVisibilityPredicate("s"));
         Boolean result = jdbcClient.sql(sql)
                 .param("providerId", providerId)
                 .param("categoryId", categoryId)
                 .param("lat", point == null ? null : point.lat(), Types.DOUBLE)
                 .param("lon", point == null ? null : point.lon(), Types.DOUBLE)
                 .param("regionCode", regionCode, Types.VARCHAR)
+                .param("visibilityToleranceSeconds", SubscriptionVisibilitySql.DEFAULT_PERIOD_END_TOLERANCE_SECONDS)
                 .query(Boolean.class)
                 .single();
         return Boolean.TRUE.equals(result);
@@ -109,6 +123,7 @@ class EligibilityRepository {
                 .param("lon", point == null ? null : point.lon(), Types.DOUBLE)
                 .param("regionCode", regionCode, Types.VARCHAR)
                 .param("maxRadiusM", CoverageSql.MAX_RADIUS_METERS)
+                .param("visibilityToleranceSeconds", SubscriptionVisibilitySql.DEFAULT_PERIOD_END_TOLERANCE_SECONDS)
                 .query((rs, rowNum) -> (UUID) rs.getObject("id"))
                 .list();
         return Set.copyOf(ids);

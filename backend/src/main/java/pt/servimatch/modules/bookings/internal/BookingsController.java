@@ -3,9 +3,11 @@ package pt.servimatch.modules.bookings.internal;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
+import pt.servimatch.modules.bookings.internal.web.BookingDetailDto;
 import pt.servimatch.modules.bookings.internal.web.BookingDto;
 import pt.servimatch.modules.users.UsersApi;
 
@@ -26,6 +28,12 @@ class BookingsController {
     BookingsController(BookingsService bookingsService, UsersApi usersApi) {
         this.bookingsService = bookingsService;
         this.usersApi = usersApi;
+    }
+
+    @GetMapping("/v1/bookings/{bookingId}")
+    BookingDetailDto getBooking(Authentication authentication, @PathVariable UUID bookingId) {
+        UUID requesterId = usersApi.ensureProvisioned(((JwtAuthenticationToken) authentication).getToken());
+        return bookingsService.detail(bookingId, requesterId);
     }
 
     @PostMapping("/v1/bookings/{bookingId}/complete")

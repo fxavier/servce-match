@@ -10,6 +10,11 @@
 spring:
   autoconfigure:
     exclude: []
+  datasource:
+    hikari:
+      # Ver comentário equivalente em application-notifications-it.yml.
+      maximum-pool-size: 2
+      minimum-idle: 1
   flyway:
     locations: classpath:db/migration
     baseline-on-migrate: false

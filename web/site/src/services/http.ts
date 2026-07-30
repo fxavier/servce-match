@@ -13,6 +13,15 @@ const API_BASE = import.meta.env.VITE_API_BASE ?? '/api';
 export const api = createClient<paths>({
   baseUrl: API_BASE,
   credentials: 'include',
+  // Indireção deliberada: em vez de deixar o `openapi-fetch` capturar
+  // `globalThis.fetch` uma única vez na criação do cliente (módulo
+  // avaliado uma só vez, por cache de módulos ES), procura-se `fetch` em
+  // `globalThis` a cada pedido. Sem isto, testes que troquem
+  // `globalThis.fetch` depois deste módulo já ter sido importado (`vi.stubGlobal`)
+  // continuariam presos à implementação real — sintoma: `ECONNREFUSED`
+  // contra `localhost:80` em vez do mock. Não muda nada em runtime real,
+  // onde `globalThis.fetch` nunca muda depois do arranque.
+  fetch: (...args: Parameters<typeof fetch>) => globalThis.fetch(...args),
 });
 
 function readCookie(name: string): string | undefined {

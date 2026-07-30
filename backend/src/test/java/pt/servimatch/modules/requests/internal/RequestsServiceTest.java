@@ -19,6 +19,7 @@ import pt.servimatch.modules.requests.internal.web.AddressDto;
 import pt.servimatch.modules.requests.internal.web.CreateServiceRequestRequest;
 import pt.servimatch.modules.requests.internal.web.ImageRefDto;
 import pt.servimatch.modules.requests.internal.web.ServiceRequestDto;
+import pt.servimatch.modules.requests.internal.web.ServiceRequestPageDto;
 
 import java.time.Instant;
 import java.util.List;
@@ -28,6 +29,9 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -183,10 +187,122 @@ class RequestsServiceTest {
                 .containsExactly("https://signed.example/a", "https://signed.example/b");
     }
 
+    // ---------------------------------------------------------------- listMine (GET /v1/requests)
+
+    /**
+     * Filtro de {@code status} não reconhecido é {@code 400}, nunca página
+     * vazia silenciosa (CLAUDE.md/relatório de entrega): uma lista vazia
+     * faria o cliente acreditar que não tem pedidos.
+     */
+    @Test
+    void listMineRejectsInvalidStatusFilter() {
+        assertThatThrownBy(() -> service.listMine(ownerId, "NOT_A_REAL_STATUS", null, 20))
+                .isInstanceOfSatisfying(ErrorResponseException.class,
+                        ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+
+        verify(repository, never()).findPageForCustomer(any(), any(), any(), anyInt());
+    }
+
+    /** O dono pede a própria página: filtro de dono sempre delegado ao repositório (SQL), nunca decidido em memória. */
+    @Test
+    void listMineDelegatesOwnerAndStatusToTheRepository() {
+        when(repository.findPageForCustomer(eq(ownerId), eq("PUBLISHED"), any(), eq(21)))
+                .thenReturn(List.of(row("PUBLISHED", Instant.now())));
+
+        ServiceRequestPageDto page = service.listMine(ownerId, "PUBLISHED", null, 20);
+
+        assertThat(page.items()).hasSize(1);
+        verify(repository).findPageForCustomer(eq(ownerId), eq("PUBLISHED"), any(), eq(21));
+    }
+
+    /** listMine é sempre a própria página do dono: morada exata, nunca mascarada. */
+    @Test
+    void listMineReturnsExactAddressSinceViewerIsAlwaysTheOwner() {
+        when(repository.findPageForCustomer(eq(ownerId), isNull(), any(), anyInt()))
+                .thenReturn(List.of(row("DRAFT", null)));
+
+        ServiceRequestPageDto page = service.listMine(ownerId, null, null, 20);
+
+        assertThat(page.items()).singleElement().satisfies(dto -> {
+            assertThat(dto.address().line1()).isEqualTo("Rua Teste");
+            assertThat(dto.address().postalCode()).isEqualTo("1000-001");
+        });
+    }
+
+    // ---------------------------------------------------------------- exposição de morada (getForViewer)
+
+    @Test
+    void getForViewerReturnsExactAddressToTheOwner() {
+        when(repository.findById(requestId)).thenReturn(Optional.of(row("PUBLISHED", Instant.now())));
+
+        ServiceRequestDto dto = service.getForViewer(requestId, ownerId, null, false);
+
+        assertThat(dto.address().line1()).isEqualTo("Rua Teste");
+        assertThat(dto.address().postalCode()).isEqualTo("1000-001");
+    }
+
+    @Test
+    void getForViewerReturnsExactAddressToAdmin() {
+        when(repository.findById(requestId)).thenReturn(Optional.of(row("PUBLISHED", Instant.now())));
+
+        UUID admin = UUID.randomUUID();
+        ServiceRequestDto dto = service.getForViewer(requestId, admin, null, true);
+
+        assertThat(dto.address().line1()).isEqualTo("Rua Teste");
+    }
+
+    /**
+     * Auditoria confirmada: um prestador elegível não pode receber
+     * {@code line1}/{@code line2}, o código postal completo, nem as
+     * coordenadas exatas — só granularidade de zona.
+     */
+    @Test
+    void getForViewerMasksAddressForAnEligibleProvider() {
+        ServiceRequestRow published = rowWithLocation("PUBLISHED", 38.716701, -9.139899);
+        when(repository.findById(requestId)).thenReturn(Optional.of(published));
+        UUID viewerProviderId = UUID.randomUUID();
+        when(matchingApi.isEligible(any())).thenReturn(true);
+
+        ServiceRequestDto dto = service.getForViewer(requestId, UUID.randomUUID(), viewerProviderId, false);
+
+        assertThat(dto.address().line1()).isNull();
+        assertThat(dto.address().line2()).isNull();
+        assertThat(dto.address().postalCode()).isEqualTo("1000");
+        assertThat(dto.address().city()).isEqualTo("Lisboa");
+        assertThat(dto.address().location().lat()).isEqualTo(38.72);
+        assertThat(dto.address().location().lon()).isEqualTo(-9.14);
+    }
+
+    /**
+     * O arredondamento é uma grelha fixa (determinístico), não ruído
+     * aleatório: repetir a mesma leitura tem de devolver sempre o mesmo par
+     * — ao contrário de jitter aleatório, cuja média ao longo de repetições
+     * recupera o ponto exato.
+     */
+    @Test
+    void addressMaskingRoundingIsDeterministicAcrossRepeatedReads() {
+        ServiceRequestRow published = rowWithLocation("PUBLISHED", 38.716701, -9.139899);
+        when(repository.findById(requestId)).thenReturn(Optional.of(published));
+        UUID viewerProviderId = UUID.randomUUID();
+        when(matchingApi.isEligible(any())).thenReturn(true);
+
+        ServiceRequestDto first = service.getForViewer(requestId, UUID.randomUUID(), viewerProviderId, false);
+        ServiceRequestDto second = service.getForViewer(requestId, UUID.randomUUID(), viewerProviderId, false);
+
+        assertThat(first.address().location()).isEqualTo(second.address().location());
+    }
+
     private ServiceRequestRow row(String status, Instant publishedAt) {
         return new ServiceRequestRow(
                 requestId, ownerId, categoryId, "Fuga de água na cozinha", "desc",
                 "Rua Teste", null, "1000-001", "Lisboa", "1106", "PT",
                 null, null, "NORMAL", null, status, publishedAt, Instant.now());
+    }
+
+    private ServiceRequestRow rowWithLocation(String status, double lat, double lon) {
+        return new ServiceRequestRow(
+                requestId, ownerId, categoryId, "Fuga de água na cozinha", "desc",
+                "Rua Teste", null, "1000-001", "Lisboa", "1106", "PT",
+                lat, lon, "NORMAL", null, status, Instant.now(), Instant.now());
     }
 }

@@ -4,7 +4,9 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -47,6 +49,21 @@ class UserRepository {
                 .param("id", id)
                 .query(this::mapRow)
                 .optional();
+    }
+
+    /**
+     * Tradução em lote {@code id → (display_name)} — uma única consulta
+     * {@code IN (:ids)}, nunca um {@code SELECT} por id (ver
+     * {@code UsersApi#findByIds}). Chamador garante {@code ids} não vazio.
+     */
+    List<UserRow> findByIds(Set<UUID> ids) {
+        return jdbcClient.sql("""
+                        SELECT id, keycloak_sub, email, display_name, status
+                        FROM users WHERE id IN (:ids)
+                        """)
+                .param("ids", ids)
+                .query(this::mapRow)
+                .list();
     }
 
     /**

@@ -1,5 +1,8 @@
 export type Role = 'CUSTOMER' | 'PROVIDER' | 'ADMIN';
 
+/** Papéis que um utilizador pode escolher no registo — nunca `ADMIN` (ADR-0012 D2: allowlist no servidor, não confiança no cliente). */
+export type RegisterableRole = 'CUSTOMER' | 'PROVIDER';
+
 export interface SessionUser {
   id: string;
   displayName: string;
@@ -10,10 +13,36 @@ export interface SessionUser {
 
 export type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 
+export interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
+export interface RegisterInput {
+  name: string;
+  email: string;
+  password: string;
+  role: RegisterableRole;
+}
+
 export interface AuthContextValue {
   status: AuthStatus;
   user: SessionUser | undefined;
-  login: (returnTo: string) => void;
+  /**
+   * `POST /auth/login` no BFF (ADR-0012 D3) — nunca um redirect para o
+   * Keycloak. Rejeita com `ProblemDetails` em credenciais inválidas; o BFF
+   * devolve deliberadamente a mesma resposta para "email não existe" e
+   * "password errada" (D7.3) — este cliente nunca tenta distinguir os dois.
+   */
+  login: (credentials: LoginCredentials) => Promise<SessionUser>;
+  /**
+   * `POST /auth/register` no BFF (ADR-0012 D2) — cria a conta no Keycloak
+   * (Admin REST API) e faz login imediato na mesma resposta. Um email já
+   * registado é rejeitado com `409` (lança); o único caso em que isto
+   * devolve `undefined` sem lançar é uma conta criada com sucesso cujo
+   * login automático subsequente não confirmou sessão.
+   */
+  register: (input: RegisterInput) => Promise<SessionUser | undefined>;
   logout: () => Promise<void>;
   hasRole: (role: Role) => boolean;
 }

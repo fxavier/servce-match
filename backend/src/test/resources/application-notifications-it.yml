@@ -9,6 +9,21 @@
 spring:
   autoconfigure:
     exclude: []
+  datasource:
+    hikari:
+      # Cada classe de teste com @ActiveProfiles + @DynamicPropertySource
+      # próprio arranca o seu próprio ApplicationContext (e portanto o seu
+      # próprio pool Hikari) mesmo repetindo este perfil — o TestContext
+      # framework mantém-nos todos em cache, vivos em simultâneo, até ao
+      # fim da JVM. Sem este limite, cada pool reservava o default (10)
+      # e a soma esgotava o `max_connections` (100) do Postgres partilhado
+      # (pt.servimatch.testsupport.SharedPostgis) assim que ~11 contextos
+      # se acumulavam — "FATAL: sorry, too many clients already".
+      # Nenhum teste de integração neste módulo usa concorrência real
+      # (sem ExecutorService/threads) dentro de um único contexto, por
+      # isso 2 chega para nunca bloquear e ainda deixa margem sobre 1.
+      maximum-pool-size: 2
+      minimum-idle: 1
   flyway:
     locations: classpath:db/migration
     baseline-on-migrate: false

@@ -27,7 +27,11 @@ export function NewReviewPage() {
     mutationFn: () =>
       services.reviews.create({
         bookingId: bookingId as string,
-        targetId: bookingQuery.data?.proposalId ?? '',
+        // `targetId` é um `users.id`, não o `provider_profile.id` de
+        // `Proposal.providerId` — só `BookingDetail.counterpartUserId`
+        // resolve isto dos dois lados (ver comentário do schema em
+        // docs/api/openapi.yaml).
+        targetId: bookingQuery.data?.counterpartUserId ?? '',
         rating,
         comment: comment || undefined,
       }),

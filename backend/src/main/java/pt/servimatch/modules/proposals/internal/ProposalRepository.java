@@ -94,6 +94,28 @@ class ProposalRepository {
         return spec.query(this::mapRow).list();
     }
 
+    /**
+     * Página ordenada por {@code created_at DESC, id DESC}
+     * ({@code listMyProposals}, {@code GET /v1/proposals/me}). Filtro de
+     * dono <b>sempre em SQL</b> ({@code provider_id = :providerId}), nunca
+     * em memória — mesma disciplina de isolamento usada para o dono do
+     * pedido em {@code requests.RequestRepository#findPageForCustomer}.
+     */
+    List<ProposalRow> findPageForProvider(UUID providerId, java.time.Instant afterCreatedAt, UUID afterId, int limit) {
+        StringBuilder sql = new StringBuilder(SELECT_COLUMNS).append(" WHERE provider_id = :providerId ");
+        if (afterCreatedAt != null) {
+            sql.append(" AND (created_at, id) < (:afterCreatedAt, :afterId) ");
+        }
+        sql.append(" ORDER BY created_at DESC, id DESC LIMIT :limit ");
+        JdbcClient.StatementSpec spec = jdbcClient.sql(sql.toString())
+                .param("providerId", providerId)
+                .param("limit", limit);
+        if (afterCreatedAt != null) {
+            spec = spec.param("afterCreatedAt", java.sql.Timestamp.from(afterCreatedAt)).param("afterId", afterId);
+        }
+        return spec.query(this::mapRow).list();
+    }
+
     /** CAS {@code SENT → ACCEPTED}. @return true se a transição ocorreu nesta chamada. */
     boolean accept(UUID proposalId) {
         int rows = jdbcClient.sql("UPDATE proposal SET status = 'ACCEPTED' WHERE id = :id AND status = 'SENT'")

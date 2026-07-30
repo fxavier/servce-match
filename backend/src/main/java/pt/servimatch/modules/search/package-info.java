@@ -9,12 +9,14 @@
  * — ver {@code docs/AGENTES.md}.
  *
  * <p>{@code allowedDependencies} fechado nesta revisão (Onda 1b,
- * {@code backend-platform}), a partir dos imports reais: só {@code geo}
- * (filtro geográfico de {@code GET /v1/search/providers}). Um módulo que
- * precise de uma dependência nova pede-a a este agente.
+ * {@code backend-platform}), a partir dos imports reais: {@code geo}
+ * (filtro geográfico de {@code GET /v1/search/providers}) e {@code billing}
+ * — compor a elegibilidade do prestador a partir do estado da subscrição,
+ * em vez de copiar o predicado. Um módulo que precise de uma dependência
+ * nova pede-a a este agente.
  */
 @org.springframework.modulith.ApplicationModule(
         displayName = "Search",
-        allowedDependencies = {"modules.geo"}
+        allowedDependencies = {"modules.geo", "modules.billing"}
 )
 package pt.servimatch.modules.search;

@@ -21,7 +21,7 @@ const STEP_LABELS = ['Categoria', 'Descrição', 'Morada', 'Fotografias'];
 
 export function NewRequestWizardPage() {
   const navigate = useNavigate();
-  const { status, login } = useAuth();
+  const { status } = useAuth();
   const [searchParams] = useSearchParams();
 
   const [step, setStep] = useState(0);
@@ -169,7 +169,7 @@ export function NewRequestWizardPage() {
         saveDraft(withPending);
         return withPending;
       });
-      login('/pedidos/novo');
+      void navigate(`/entrar?returnTo=${encodeURIComponent('/pedidos/novo')}`);
       return;
     }
     await publishRequest(draft);

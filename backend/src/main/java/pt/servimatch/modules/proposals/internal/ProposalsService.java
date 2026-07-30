@@ -73,6 +73,65 @@ class ProposalsService implements ProposalsApi {
         return toDto(repository.findById(proposalId).orElseThrow());
     }
 
+    /**
+     * {@code GET /v1/proposals/me} — propostas enviadas pelo prestador
+     * autenticado. Dono resolvido pelo controlador a partir do {@code sub}
+     * do JWT; filtro por dono <b>sempre em SQL</b>
+     * ({@link ProposalRepository#findPageForProvider}), nunca em memória.
+     *
+     * <p><b>Sem perfil de prestador → página vazia, não 403.</b> Um
+     * {@code ROLE_PROVIDER} que nunca chegou a enviar propostas também nunca
+     * tem {@code provider_profile}; listar o que (ainda) não existe não é
+     * diferente de "zero resultados". {@code providerId} vem de
+     * {@link ProvidersApi#findProviderIdByUserId} — não de
+     * {@code ensureProvisioned} — para uma leitura não criar um perfil de
+     * prestador como efeito lateral (mesmo raciocínio de
+     * {@code RequestsController#getRequest}).
+     *
+     * <p><b>Sem gating de subscrição aqui, deliberadamente.</b> O ADR-0011
+     * (D2) separa duas perguntas: P1 "este prestador pode operar?" — porta
+     * de entrada de <em>escrever</em> (enviar proposta) e de
+     * <em>descobrir</em> (inbox, pesquisa) — de "ver o que já é meu", que
+     * este endpoint é. O CLAUDE.md deste agente é explícito: "o gating
+     * limita escrever e descobrir, não ler o que já é teu". Uma proposta já
+     * enviada não deixa de ser do prestador que a enviou só porque a
+     * subscrição entretanto expirou (o cliente que a recebeu continua a
+     * poder aceitá-la — {@code accept} não depende de {@code checkEligibility}
+     * do lado do prestador); negar-lhe a leitura seria esconder-lhe o
+     * próprio histórico, não impedir uma ação nova.
+     */
+    ProposalPageDto listMine(UUID userId, String cursor, int limit) {
+        Optional<UUID> providerId = providersApi.findProviderIdByUserId(userId);
+        if (providerId.isEmpty()) {
+            return new ProposalPageDto(List.of(), new PageMetaDto(null));
+        }
+
+        CursorCodec.Position after = CursorCodec.decode(cursor).orElse(null);
+        List<ProposalRow> rows = repository.findPageForProvider(
+                providerId.get(), after == null ? null : after.createdAt(), after == null ? null : after.id(), limit + 1);
+        boolean hasMore = rows.size() > limit;
+        List<ProposalRow> page = hasMore ? rows.subList(0, limit) : rows;
+        String nextCursor = hasMore
+                ? CursorCodec.encode(page.get(page.size() - 1).createdAt(), page.get(page.size() - 1).id())
+                : null;
+
+        // Toda a página é do mesmo prestador (o autenticado): um único
+        // ProviderSummary resolvido uma vez, nunca por linha (CLAUDE.md —
+        // ausência de N+1). Ao contrário de listForRequest, onde cada linha
+        // pode ser de um prestador diferente e por isso continua, por agora,
+        // uma leitura de summary por linha (ProvidersApi ainda não expõe
+        // summary em lote — ver relatório de entrega, lacuna pré-existente,
+        // não introduzida por este endpoint).
+        ProviderSummaryDto summary = providersApi.summary(providerId.get())
+                .map(s -> new ProviderSummaryDto(
+                        s.id(), s.displayName(), s.headline(), s.companyName(), s.ratingAvg(), s.ratingCount(),
+                        s.verified(), s.premiumBadge(), s.avatarUrl()))
+                .orElse(null);
+
+        List<ProposalDto> items = page.stream().map(row -> toDto(row, summary)).toList();
+        return new ProposalPageDto(items, new PageMetaDto(nextCursor));
+    }
+
     ProposalPageDto listForRequest(UUID requestId, UUID viewerId, boolean isAdmin, String cursor, int limit) {
         RequestsApi.RequestSummary requestSummary = requestsApi.get(requestId)
                 .orElseThrow(() -> Problems.notFound("Pedido não encontrado."));
@@ -136,6 +195,11 @@ class ProposalsService implements ProposalsApi {
                         s.id(), s.displayName(), s.headline(), s.companyName(), s.ratingAvg(), s.ratingCount(),
                         s.verified(), s.premiumBadge(), s.avatarUrl()))
                 .orElse(null);
+        return toDto(row, summary);
+    }
+
+    /** Variante para {@link #listMine}, com o {@code ProviderSummaryDto} já resolvido fora do loop (ver o seu javadoc). */
+    private ProposalDto toDto(ProposalRow row, ProviderSummaryDto summary) {
         return new ProposalDto(
                 row.id(), row.requestId(), row.providerId(), summary,
                 new MoneyDto(row.priceAmountCents(), row.priceCurrency()),

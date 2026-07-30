@@ -38,6 +38,11 @@
  *       argumento que justificaria SQL direto (ADR-0010) não se aplica
  *       aqui; a API Java chega.</li>
  * </ul>
+ *
+ * <p>Inalterado na revisão "dados-reais" (Onda 1): {@code GET
+ * /v1/conversations} (listar as minhas conversas, ainda por implementar)
+ * não precisa de nenhuma dependência nova — filtra {@code conversation}
+ * pelo participante autenticado, já resolvido por {@code UsersApi}.
  */
 @org.springframework.modulith.ApplicationModule(
         displayName = "Chat",

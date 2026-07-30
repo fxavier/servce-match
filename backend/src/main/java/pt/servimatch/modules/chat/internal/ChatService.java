@@ -3,19 +3,25 @@ package pt.servimatch.modules.chat.internal;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pt.servimatch.modules.chat.internal.web.ConversationPageDto;
+import pt.servimatch.modules.chat.internal.web.ConversationSummaryDto;
 import pt.servimatch.modules.chat.internal.web.CreateMessageRequest;
 import pt.servimatch.modules.chat.internal.web.ImageRefDto;
 import pt.servimatch.modules.chat.internal.web.MessageDto;
 import pt.servimatch.modules.chat.internal.web.MessagePageDto;
 import pt.servimatch.modules.chat.internal.web.PageMetaDto;
 import pt.servimatch.modules.providers.ProvidersApi;
+import pt.servimatch.modules.requests.RequestsApi;
 import pt.servimatch.modules.uploads.ImageRef;
 import pt.servimatch.modules.uploads.UploadPurpose;
 import pt.servimatch.modules.uploads.UploadsApi;
+import pt.servimatch.modules.users.UsersApi;
 
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -37,11 +43,95 @@ class ChatService {
     private final ConversationRepository repository;
     private final UploadsApi uploadsApi;
     private final ProvidersApi providersApi;
+    private final UsersApi usersApi;
+    private final RequestsApi requestsApi;
 
-    ChatService(ConversationRepository repository, UploadsApi uploadsApi, ProvidersApi providersApi) {
+    ChatService(ConversationRepository repository, UploadsApi uploadsApi, ProvidersApi providersApi,
+                UsersApi usersApi, RequestsApi requestsApi) {
         this.repository = repository;
         this.uploadsApi = uploadsApi;
         this.providersApi = providersApi;
+        this.usersApi = usersApi;
+        this.requestsApi = requestsApi;
+    }
+
+    /**
+     * {@code GET /v1/conversations}: conversas do autenticado, mais recente
+     * primeiro. Autorização feita no {@code WHERE} de
+     * {@link ConversationRepository#findPageForParticipant} — nunca carrega
+     * conversas de outro participante para as filtrar aqui.
+     *
+     * <p>Resolução de nomes/títulos <b>em lote por página</b>, nunca num
+     * ciclo de chamadas singulares: um único {@link UsersApi#findByIds} para
+     * os interlocutores e um único
+     * {@link RequestsApi#findTitlesByIds(java.util.Collection)} para os
+     * títulos dos pedidos, ambos com o conjunto de ids <em>desta página</em>
+     * — nunca um por linha. {@code counterpartAvatarSeed} é o
+     * {@code users.id} do interlocutor (determinístico, sem PII) — nunca o
+     * nome, que aqui fica sempre visível ao próprio participante mas não faz
+     * sentido reutilizar como semente exposta.
+     */
+    @Transactional(readOnly = true)
+    ConversationPageDto listConversations(UUID viewerId, String cursor, int limit) {
+        UUID viewerProviderId = providersApi.findProviderIdByUserId(viewerId).orElse(null);
+        CursorCodec.Position after = CursorCodec.decode(cursor).orElse(null);
+
+        List<ConversationSummaryRow> rows = repository.findPageForParticipant(viewerId, viewerProviderId, after, limit + 1);
+        boolean hasMore = rows.size() > limit;
+        List<ConversationSummaryRow> page = hasMore ? rows.subList(0, limit) : rows;
+        String nextCursor = hasMore
+                ? CursorCodec.encode(page.get(page.size() - 1).sortAt(), page.get(page.size() - 1).id())
+                : null;
+
+        // Interlocutor: quando o autenticado é o cliente, o interlocutor é o
+        // utilizador por trás do provider_profile da conversa — providerId é
+        // um provider_profile.id, não um users.id (mesma distinção que
+        // BookingDetail.counterpartUserId documenta no contrato). Quando o
+        // autenticado é o prestador, customer_id já É o users.id.
+        Set<UUID> counterpartProviderIds = new HashSet<>();
+        for (ConversationSummaryRow row : page) {
+            if (row.customerId().equals(viewerId)) {
+                counterpartProviderIds.add(row.providerId());
+            }
+        }
+        Map<UUID, UUID> providerUserIds = providersApi.findUserIdsByProviderIds(counterpartProviderIds);
+
+        Set<UUID> counterpartUserIds = new HashSet<>();
+        for (ConversationSummaryRow row : page) {
+            counterpartUserIds.add(counterpartUserId(row, viewerId, providerUserIds));
+        }
+        Map<UUID, UsersApi.UserSummaryView> names = usersApi.findByIds(counterpartUserIds);
+
+        Set<UUID> requestIds = page.stream().map(ConversationSummaryRow::requestId).collect(Collectors.toSet());
+        Map<UUID, String> titles = requestsApi.findTitlesByIds(requestIds);
+
+        List<ConversationSummaryDto> items = page.stream()
+                .map(row -> toSummaryDto(row, viewerId, providerUserIds, names, titles))
+                .toList();
+        return new ConversationPageDto(items, new PageMetaDto(nextCursor));
+    }
+
+    private static UUID counterpartUserId(ConversationSummaryRow row, UUID viewerId, Map<UUID, UUID> providerUserIds) {
+        if (row.customerId().equals(viewerId)) {
+            return providerUserIds.get(row.providerId());
+        }
+        return row.customerId();
+    }
+
+    private ConversationSummaryDto toSummaryDto(ConversationSummaryRow row, UUID viewerId, Map<UUID, UUID> providerUserIds,
+                                                 Map<UUID, UsersApi.UserSummaryView> names, Map<UUID, String> titles) {
+        UUID counterpartUserId = counterpartUserId(row, viewerId, providerUserIds);
+        String counterpartName = counterpartUserId == null ? "" : names.getOrDefault(
+                counterpartUserId, new UsersApi.UserSummaryView(counterpartUserId, "")).displayName();
+        String counterpartAvatarSeed = counterpartUserId == null ? row.id().toString() : counterpartUserId.toString();
+        return new ConversationSummaryDto(
+                row.id(),
+                counterpartName,
+                counterpartAvatarSeed,
+                row.lastMessagePreview(),
+                row.lastMessageAt(),
+                row.unreadCount(),
+                titles.getOrDefault(row.requestId(), ""));
     }
 
     /** Chamado por {@link ProposalAcceptedListener}; idempotente (ver {@link ConversationRepository#createIfAbsent}). */

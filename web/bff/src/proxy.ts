@@ -50,13 +50,26 @@ export function requireSession({ config, oidcConfig, sessions }: ProxyDeps) {
     }
 
     try {
-      const refreshed = await client.refreshTokenGrant(oidcConfig, session.refreshToken);
-      const updated = sessions.update(session.id, {
-        accessToken: refreshed.access_token,
-        refreshToken: refreshed.refresh_token ?? session.refreshToken,
-        idToken: refreshed.id_token ?? session.idToken,
-        accessTokenExpiresAt: Date.now() + (refreshed.expiresIn() ?? 300) * 1000,
+      // `refreshOnce` deduplica renovações concorrentes do mesmo
+      // `session.id`: dois pedidos `/api/**` em paralelo com o access token
+      // quase a expirar partilham a mesma chamada a `refreshTokenGrant` em
+      // vez de cada um tentar rodar o refresh token antigo (o segundo
+      // falharia sempre que o Keycloak rode o refresh token na resposta).
+      const updated = await sessions.refreshOnce(session.id, async (current) => {
+        const refreshed = await client.refreshTokenGrant(oidcConfig, current.refreshToken!);
+        return {
+          accessToken: refreshed.access_token,
+          refreshToken: refreshed.refresh_token ?? current.refreshToken,
+          idToken: refreshed.id_token ?? current.idToken,
+          accessTokenExpiresAt: Date.now() + (refreshed.expiresIn() ?? 300) * 1000,
+        };
       });
+      if (!updated) {
+        sessions.destroy(session.id);
+        clearSessionCookie(res, config);
+        sendUnauthenticated(res, 'Sessão expirada.');
+        return;
+      }
       setSessionCookie(res, config, session.id);
       req.sessionRecord = updated;
       next();

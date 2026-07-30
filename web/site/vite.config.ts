@@ -28,5 +28,14 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     css: false,
+    env: {
+      // Fora de um browser real, `fetch`/`Request` (Node/undici, usados por
+      // Vitest) não resolvem URLs relativos contra `window.location` como um
+      // browser faria — `new URL('/api/...')` sem isto falha com "Failed to
+      // parse URL". Só afeta testes (`services/http/*`); em dev/produção
+      // continua a valer o omisso relativo `/api` (proxy do Vite/BFF,
+      // ADR-0002), nunca isto.
+      VITE_API_BASE: 'http://localhost/api',
+    },
   },
 });

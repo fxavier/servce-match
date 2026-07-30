@@ -1,6 +1,5 @@
 import { Inbox, LayoutDashboard, MessageSquare, User, Wallet } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { DevMockPanel } from '../components/DevMockPanel';
 import { SiteFooter } from '../components/layout/SiteFooter';
 import { SiteHeader } from '../components/layout/SiteHeader';
 import { cn } from '../lib/cn';
@@ -48,7 +47,6 @@ export function ProviderLayout() {
         </main>
       </div>
       <SiteFooter />
-      <DevMockPanel />
     </div>
   );
 }

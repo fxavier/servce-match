@@ -9,6 +9,7 @@ import pt.servimatch.modules.billing.Subscription;
 import pt.servimatch.modules.billing.SubscriptionLifecycle;
 import pt.servimatch.modules.billing.SubscriptionPlan;
 import pt.servimatch.modules.billing.SubscriptionStatus;
+import pt.servimatch.modules.billing.SubscriptionVisibilitySql;
 import pt.servimatch.modules.billing.events.SubscriptionActivated;
 import pt.servimatch.modules.billing.events.SubscriptionCancelled;
 import pt.servimatch.modules.billing.events.SubscriptionExpired;
@@ -66,6 +67,11 @@ public class DefaultSubscriptionLifecycle implements SubscriptionLifecycle {
     @Override
     public Optional<Subscription> findByProvider(UUID providerId) {
         return subscriptionRepository.findNonTerminalByProvider(providerId);
+    }
+
+    @Override
+    public Optional<Subscription> findMostRecentByProvider(UUID providerId) {
+        return subscriptionRepository.findMostRecentByProvider(providerId);
     }
 
     @Override
@@ -162,9 +168,8 @@ public class DefaultSubscriptionLifecycle implements SubscriptionLifecycle {
 
     @Override
     public boolean isVisibilityEligible(UUID providerId) {
-        return subscriptionRepository.findNonTerminalByProvider(providerId)
-                .map(s -> s.status().grantsVisibility())
-                .orElse(false);
+        return subscriptionRepository.isVisibilityEligible(
+                providerId, SubscriptionVisibilitySql.DEFAULT_PERIOD_END_TOLERANCE_SECONDS);
     }
 
     @Override
