@@ -90,11 +90,36 @@ class RequestVisibilityIntegrationTest {
 
         mockMvc.perform(get("/v1/providers/me/requests").with(providerJwt(providerSub)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items[?(@.id=='" + requestId + "')]").exists());
+                .andExpect(jsonPath("$.items[?(@.id=='" + requestId + "')]").exists())
+                // Auditoria confirmada: o inbox do prestador nunca devolve line1
+                // nem o código postal completo — só granularidade de zona. Único
+                // item elegível nesta fixture, por isso items[0] é seguro.
+                .andExpect(jsonPath("$.items[0].id").value(requestId.toString()))
+                .andExpect(jsonPath("$.items[0].address.line1").doesNotExist())
+                .andExpect(jsonPath("$.items[0].address.postalCode").value("1000"));
 
         mockMvc.perform(get("/v1/requests/{id}", requestId).with(providerJwt(providerSub)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(requestId.toString()));
+                .andExpect(jsonPath("$.id").value(requestId.toString()))
+                .andExpect(jsonPath("$.address.line1").doesNotExist())
+                .andExpect(jsonPath("$.address.postalCode").value("1000"));
+    }
+
+    @Test
+    void ownerAlwaysSeesTheExactAddressOfTheirOwnRequest() throws Exception {
+        UUID categoryId = insertCategory();
+        String customerSub = "kc-req-vis-cust-exact-" + UUID.randomUUID();
+        UUID customerId = insertUser(customerSub);
+        UUID requestId = insertPublishedRequest(customerId, categoryId, 38.7169, -9.1399, "PT-11-LSB");
+
+        mockMvc.perform(get("/v1/requests/{id}", requestId).with(customerJwt(customerSub)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.address.line1").value("Rua Teste"))
+                .andExpect(jsonPath("$.address.postalCode").value("1000-001"));
+    }
+
+    private static org.springframework.test.web.servlet.request.RequestPostProcessor customerJwt(String subject) {
+        return jwt().jwt(b -> b.subject(subject)).authorities(new SimpleGrantedAuthority("ROLE_CUSTOMER"));
     }
 
     private void assertProviderDoesNotSeeRequest(String providerSub, UUID requestId) throws Exception {

@@ -17,9 +17,16 @@ export interface AppDeps {
  * os testes de integração (supertest) consigam instanciar a app sem abrir
  * uma porta de rede real.
  */
-export function createApp({ config, oidcConfig, sessions = new SessionStore() }: AppDeps): Express {
+export function createApp({ config, oidcConfig, sessions }: AppDeps): Express {
   const app = express();
   app.disable('x-powered-by');
+  const sessionStore = sessions ?? new SessionStore(config.session.absoluteTtlSeconds);
+
+  // Número explícito de saltos de proxy confiável (ADR-0012 D7.2). NUNCA
+  // `true` — isso confiaria em X-Forwarded-For vindo de qualquer origem e
+  // tornaria o rate limiting de /auth/login e /auth/register contornável
+  // com um cabeçalho forjado. `0` (omissão) ignora XFF por completo.
+  app.set('trust proxy', config.trustProxyHops);
 
   // Sem CORS: o BFF nunca aceita pedidos com credenciais de outra origem.
   // Em desenvolvimento, o Vite faz proxy de /api e /auth para aqui, pelo que
@@ -37,13 +44,17 @@ export function createApp({ config, oidcConfig, sessions = new SessionStore() }:
 
   app.get('/healthz', (_req, res) => res.status(200).json({ status: 'ok' }));
 
-  app.use('/auth', createAuthRouter({ config, oidcConfig, sessions }));
+  // JSON só para /auth (registo/login recebem { email, password, ... } no
+  // corpo). /api continua em express.raw — o BFF nunca reinterpreta o
+  // payload do domínio (ver comentário abaixo).
+  app.use('/auth', express.json({ limit: '16kb' }));
+  app.use('/auth', createAuthRouter({ config, oidcConfig, sessions: sessionStore }));
 
   // Corpo em bruto: o BFF reencaminha o payload tal como chega, sem o
   // reinterpretar — o contrato (docs/api/openapi.yaml) é responsabilidade do
   // backend, não do BFF.
   app.use('/api', express.raw({ type: () => true, limit: '10mb' }));
-  app.use('/api', createApiProxyRouter({ config, oidcConfig, sessions }));
+  app.use('/api', createApiProxyRouter({ config, oidcConfig, sessions: sessionStore }));
 
   return app;
 }

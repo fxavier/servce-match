@@ -1,18 +1,14 @@
 /**
  * Interfaces de serviço — o único contrato que componentes/features
- * conhecem (§8.2). Cada área tem exatamente duas implementações
- * (`services/mock/*`, `services/http/*`); a seleção acontece uma única vez
- * em `services/index.ts`. Nenhum componente decide "mock ou http".
+ * conhecem (§8.2). Cada área tem exatamente uma implementação
+ * (`services/http/*`, sempre HTTP real contra o BFF); nenhum componente
+ * importa `services/http/*` diretamente — todos passam por `services/index.ts`.
  */
+import type { ProviderDashboardStats } from './domainTypes';
 import type {
-  BookingSummary,
-  ConversationSummary,
-  ProviderDashboardStats,
-  ProviderProfile,
-  ReviewWithAuthor,
-} from './domainTypes';
-import type {
+  BookingDetail,
   Category,
+  ConversationSummary,
   CreateProposal,
   CreateReview,
   CreateServiceRequest,
@@ -22,13 +18,17 @@ import type {
   MessagePage,
   Proposal,
   ProposalPage,
+  ProviderProfile,
+  ProviderSummary,
   RequestStatus,
   Review,
+  ReviewWithAuthor,
   ServiceRequest,
   ServiceRequestPage,
   Subscription,
   SubscriptionCheckout,
   SubscriptionPlan,
+  UpdateProviderProfile,
   UploadTarget,
 } from './types';
 
@@ -54,9 +54,15 @@ export interface ProviderSearchParams extends ListParams {
 }
 
 export interface ProvidersService {
-  search(params: ProviderSearchParams): Promise<{ items: ProviderProfile[]; page: { nextCursor: string | null } }>;
+  /** `GET /v1/search/providers` — devolve `ProviderSummary`, sem `bio`/`location`/zonas (não fabricado no cliente). */
+  search(params: ProviderSearchParams): Promise<{ items: ProviderSummary[]; page: { nextCursor: string | null } }>;
+  /** `GET /v1/providers/{id}` — perfil público completo. */
   get(id: string): Promise<ProviderProfile>;
-  featured(limit?: number): Promise<ProviderProfile[]>;
+  featured(limit?: number): Promise<ProviderSummary[]>;
+  /** `GET /v1/providers/me` — perfil editável do prestador autenticado. */
+  getMine(): Promise<ProviderProfile>;
+  /** `PUT /v1/providers/me` — substituição total (ver `UpdateProviderProfile`). */
+  updateMine(body: UpdateProviderProfile): Promise<ProviderProfile>;
 }
 
 export interface RequestsService {
@@ -83,7 +89,7 @@ export interface ChatService {
 export interface ReviewsService {
   listForProvider(providerId: string): Promise<ReviewWithAuthor[]>;
   create(body: CreateReview): Promise<Review>;
-  getReviewableBooking(bookingId: string): Promise<BookingSummary>;
+  getReviewableBooking(bookingId: string): Promise<BookingDetail>;
 }
 
 export interface SubscriptionsService {

@@ -10,6 +10,7 @@ import { toProblem } from '../../lib/problem';
 import { services } from '../../services';
 
 const STATUS_LABEL: Record<string, string> = {
+  NONE: 'Sem subscrição',
   PENDING: 'Pendente',
   ACTIVE: 'Ativa',
   PAST_DUE: 'Pagamento em atraso',
@@ -18,6 +19,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const STATUS_TONE: Record<string, 'success' | 'accent' | 'neutral'> = {
+  NONE: 'neutral',
   PENDING: 'neutral',
   ACTIVE: 'success',
   PAST_DUE: 'accent',

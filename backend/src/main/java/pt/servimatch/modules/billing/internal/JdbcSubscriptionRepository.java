@@ -4,6 +4,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import pt.servimatch.modules.billing.Subscription;
 import pt.servimatch.modules.billing.SubscriptionStatus;
+import pt.servimatch.modules.billing.SubscriptionVisibilitySql;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -49,6 +50,47 @@ public class JdbcSubscriptionRepository {
                 .param("providerId", providerId)
                 .query(JdbcSubscriptionRepository::mapRow)
                 .optional();
+    }
+
+    /**
+     * Subscrição mais recente do prestador, em <b>qualquer</b> estado
+     * (inclui terminal) — usada por {@code GET /v1/subscriptions/me}
+     * (contrato: "subscrição mais recente ... não só a ativa"). Um prestador
+     * pode ter várias linhas ao longo do tempo (uma por ciclo de
+     * subscrever/cancelar/subscrever de novo); "mais recente" é definida por
+     * {@code created_at DESC}, com {@code id DESC} como desempate
+     * determinístico (nenhum dos dois pode empatar sozinho: {@code id} é
+     * único; {@code created_at} pode coincidir só sob concorrência
+     * extrema, nunca observada nestes testes, mas o {@code ORDER BY}
+     * teria de ser estável de qualquer forma).
+     *
+     * <p><b>Não é um método de gating.</b> Devolve subscrições
+     * {@code EXPIRED}/{@code CANCELLED} sem qualquer filtro — a decisão de
+     * quem pode operar cabe a {@link #isVisibilityEligible} /
+     * {@code hasActiveSubscription}, nunca a este método.
+     */
+    public Optional<Subscription> findMostRecentByProvider(UUID providerId) {
+        return jdbcClient.sql(SELECT + " WHERE provider_id = :providerId ORDER BY created_at DESC, id DESC LIMIT 1")
+                .param("providerId", providerId)
+                .query(JdbcSubscriptionRepository::mapRow)
+                .optional();
+    }
+
+    /**
+     * Gating de visibilidade resolvido em SQL, usando o fragmento único
+     * {@link pt.servimatch.modules.billing.SubscriptionVisibilitySql}
+     * (ADR-0011 D4/D5) — a mesma definição que
+     * {@code matching}/{@code search} devem consumir, para que a regra não
+     * volte a divergir entre este módulo e os seus leitores.
+     */
+    public boolean isVisibilityEligible(UUID providerId, int visibilityToleranceSeconds) {
+        String sql = "SELECT EXISTS (SELECT 1 FROM subscription WHERE provider_id = :providerId AND "
+                + SubscriptionVisibilitySql.grantsVisibilityPredicate(null) + ")";
+        return Boolean.TRUE.equals(jdbcClient.sql(sql)
+                .param("providerId", providerId)
+                .param("visibilityToleranceSeconds", visibilityToleranceSeconds)
+                .query(Boolean.class)
+                .single());
     }
 
     public Optional<Subscription> findByGatewaySubscriptionId(String gateway, String gatewaySubscriptionId) {

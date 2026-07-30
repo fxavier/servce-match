@@ -30,6 +30,16 @@ final class Problems {
         return of(HttpStatus.NOT_FOUND, ProblemType.NOT_FOUND, "Não encontrado", detail);
     }
 
+    /**
+     * {@code 400}: parâmetro de consulta inválido (ex. {@code status} fora
+     * do enum {@code RequestStatus}). Nunca degradar um filtro inválido
+     * para lista vazia silenciosa — o cliente acreditaria que não há dados
+     * (CLAUDE.md/relatório de entrega).
+     */
+    static ErrorResponseException badRequest(String detail) {
+        return of(HttpStatus.BAD_REQUEST, ProblemType.VALIDATION, "Parâmetros inválidos", detail);
+    }
+
     static ErrorResponseException conflict(String detail) {
         return of(HttpStatus.CONFLICT, ProblemType.CONFLICT, "Conflito de estado", detail);
     }

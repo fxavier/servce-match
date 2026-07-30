@@ -73,7 +73,7 @@ export function ProviderProfilePage() {
                 {provider.verified ? <Badge tone="signal"><BadgeCheck className="size-3.5" strokeWidth={1.5} />Verificado</Badge> : null}
                 {provider.premiumBadge ? <Badge tone="accent"><Sparkles className="size-3.5" strokeWidth={1.5} />Premium</Badge> : null}
               </div>
-              <p className="mt-1 text-body text-muted">{provider.headline}</p>
+              {provider.headline ? <p className="mt-1 text-body text-muted">{provider.headline}</p> : null}
             </div>
           </div>
           <Link
@@ -152,7 +152,7 @@ export function ProviderProfilePage() {
                           </div>
                           <RatingStars value={review.rating} className="ml-auto" />
                         </div>
-                        <p className="text-body text-muted">{review.comment}</p>
+                        {review.comment ? <p className="text-body text-muted">{review.comment}</p> : null}
                         {review.providerResponse ? (
                           <div className="ml-4 rounded-md border-l-2 border-orange-500 bg-surface-2 p-3 text-caption text-muted">
                             <span className="font-medium text-foreground">Resposta do prestador: </span>

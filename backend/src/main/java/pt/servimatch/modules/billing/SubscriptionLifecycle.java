@@ -36,6 +36,25 @@ public interface SubscriptionLifecycle {
     Optional<Subscription> findByProvider(UUID providerId);
 
     /**
+     * Subscrição mais recente do prestador, em <b>qualquer</b> estado —
+     * inclui {@code EXPIRED}/{@code CANCELLED} (contrato de
+     * {@code GET /v1/subscriptions/me}: "subscrição mais recente ... em
+     * qualquer estado ... não só a ativa"). "Mais recente" é
+     * {@code created_at DESC} com desempate determinístico — ver
+     * {@code JdbcSubscriptionRepository.findMostRecentByProvider}.
+     * {@code Optional.empty()} apenas quando o prestador nunca teve nenhuma
+     * linha em {@code subscription} (nunca subscreveu).
+     *
+     * <p><b>Não é gating.</b> Ao contrário de {@link #findByProvider}, não
+     * filtra por estado — devolve o histórico completo, uma linha. Para
+     * decidir se o prestador pode operar, usar {@link #isVisibilityEligible}
+     * ou {@link #hasActiveSubscription}; nunca inferir gating a partir do
+     * {@code status} devolvido aqui num consumidor fora deste módulo — o
+     * servidor decide, a UI só espelha (CLAUDE.md §4).
+     */
+    Optional<Subscription> findMostRecentByProvider(UUID providerId);
+
+    /**
      * Correlaciona pelo identificador de subscrição do lado do gateway
      * (ex.: renovações automáticas Stripe, cuja fatura só traz
      * {@code subscription}, não o nosso {@code client_reference_id}).
@@ -80,7 +99,22 @@ public interface SubscriptionLifecycle {
     /** Gating estrito usado pelo predicado de matching (ARQUITETURA §10.3): só {@code ACTIVE}. */
     boolean hasActiveSubscription(UUID providerId);
 
-    /** Gating de visibilidade (ARQUITETURA §12.1): {@code ACTIVE} ou {@code PAST_DUE} (grace). */
+    /**
+     * Gating de visibilidade — P1 "elegibilidade de operação" (ARQUITETURA
+     * §12.1, ADR-0011 D2/D4/D5): {@code ACTIVE} ou {@code PAST_DUE} (grace)
+     * <b>e</b> {@code current_period_end} ainda não passado (com tolerância
+     * de relógio explícita, ver
+     * {@link SubscriptionVisibilitySql#DEFAULT_PERIOD_END_TOLERANCE_SECONDS}).
+     * O segundo requisito evita a falha aberta em que uma subscrição cujo
+     * período já terminou continua a conceder visibilidade só porque o job
+     * de expiração ({@code payments.internal.SubscriptionPeriodEndJob}) ainda
+     * não correu — o predicado deixa de depender desse job para negar
+     * acesso.
+     *
+     * <p>Este é o método que a composição de P1 em {@code providers}
+     * (ADR-0011 D3, {@code ProvidersApi.checkEligibility}) deve chamar — não
+     * uma reimplementação local da regra.
+     */
     boolean isVisibilityEligible(UUID providerId);
 
     /** Subscrições {@code ACTIVE} cujo {@code current_period_end} já passou — candidatas ao job de expiração. */

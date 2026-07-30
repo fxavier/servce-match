@@ -1,0 +1,19 @@
+# Perfil "local" (ADR-0013): desenvolvimento na máquina do programador,
+# tipicamente contra o PostgreSQL/Keycloak do infra/docker-compose.yml.
+#
+# Acrescenta `classpath:db/seed` às locations do Flyway, ao lado de
+# `classpath:db/migration` (não em substituição — a ordem importa: as
+# migrações de referência, V__, continuam a correr primeiro). Isto é
+# **conveniência**, não a barreira (ADR-0013 D3, camada 2): a barreira real
+# é (1) `db/seed/**` estar fora do artefacto de produção
+# (backend/pom.xml, maven-jar-plugin) e (3) o arranque abortar se as
+# locations efetivas incluírem `db/seed` sem este perfil (ou "dev") ativo
+# (ver pt.servimatch.platform.seed.SeedLocationsGuard). Esta camada,
+# sozinha, não impede nada: SPRING_FLYWAY_LOCATIONS no ambiente sobrepõe-se
+# a este YAML (ordem de PropertySource do Spring Boot).
+#
+# Ativação: SPRING_PROFILES_ACTIVE=local
+
+spring:
+  flyway:
+    locations: classpath:db/migration,classpath:db/seed

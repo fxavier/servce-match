@@ -80,6 +80,25 @@ export async function createTestOidcSetup() {
 
   const revokedTokens: string[] = [];
 
+  /**
+   * Handlers dedicados por `grant_type`, para os testes de ADR-0012
+   * (Direct Access Grant / client_credentials) controlarem por completo a
+   * resposta — incluindo, deliberadamente, ATRASO assimétrico entre "conta
+   * existe" e "conta não existe", que é o que torna um teste de timing
+   * honesto (um teste que apenas dorme "um bocado" nos dois casos não prova
+   * nada — ver `test/loginTiming.test.ts`).
+   */
+  type GrantHandler = (form: FormData) => Promise<Response> | Response;
+  const grantHandlers = new Map<string, GrantHandler>();
+
+  function setGrantHandler(grantType: string, handler: GrantHandler): void {
+    grantHandlers.set(grantType, handler);
+  }
+
+  function clearGrantHandler(grantType: string): void {
+    grantHandlers.delete(grantType);
+  }
+
   oidcConfig[client.customFetch] = async (...args: Parameters<typeof fetch>) => {
     const request = new Request(...args);
     const url = new URL(request.url);
@@ -89,6 +108,13 @@ export async function createTestOidcSetup() {
     }
 
     if (url.pathname.endsWith('/token')) {
+      const form = await request.formData();
+      const grantType = form.get('grant_type');
+      const handler = typeof grantType === 'string' ? grantHandlers.get(grantType) : undefined;
+      if (handler) {
+        return handler(form);
+      }
+
       const body = nextTokenResponse
         ? typeof nextTokenResponse === 'function'
           ? nextTokenResponse()
@@ -119,5 +145,22 @@ export async function createTestOidcSetup() {
     fakeAccessToken,
     queueTokenResponse,
     revokedTokens,
+    setGrantHandler,
+    clearGrantHandler,
   };
+}
+
+/** `Response` de sucesso do token endpoint, com os campos mínimos que o openid-client exige. */
+export function tokenSuccessResponse(body: Record<string, unknown>): Response {
+  return Response.json({ token_type: 'Bearer', expires_in: 300, ...body });
+}
+
+/** `Response` de erro do token endpoint, no formato OAuth2 (`error`/`error_description`). */
+export function tokenErrorResponse(status: number, error: string, errorDescription?: string): Response {
+  return Response.json({ error, error_description: errorDescription }, { status });
+}
+
+/** Atraso controlável por relógio falso (`vi.useFakeTimers` + `vi.advanceTimersByTimeAsync`). */
+export function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

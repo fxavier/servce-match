@@ -66,6 +66,8 @@ class MatchingEligibilityTest {
     private static UUID providerOutsideRadius;
     private static UUID providerExactBoundary;
     private static UUID providerNoActiveSubscription;
+    private static UUID providerInPastDueGracePeriod;
+    private static UUID providerPastDueGraceExpired;
     private static UUID providerNotApproved;
     private static UUID providerMatchingRegion;
     private static UUID providerNonMatchingRegion;
@@ -87,7 +89,24 @@ class MatchingEligibilityTest {
         providerInsideRadius = seedProvider(planId, "Dentro do raio", "APPROVED", "ACTIVE");
         providerOutsideRadius = seedProvider(planId, "Fora do raio", "APPROVED", "ACTIVE");
         providerExactBoundary = seedProvider(planId, "Fronteira exata", "APPROVED", "ACTIVE");
-        providerNoActiveSubscription = seedProvider(planId, "Sem subscrição ativa", "APPROVED", "PAST_DUE");
+        // Estado terminal (não PAST_DUE): sob ADR-0011 §D4, PAST_DUE concede
+        // grace period, pelo que só um estado terminal (CANCELLED/EXPIRED)
+        // prova genuinamente "sem subscrição que conceda visibilidade" — ver
+        // providerInPastDueGracePeriod/providerPastDueGraceExpired abaixo
+        // para os dois casos que PAST_DUE de facto cobre.
+        providerNoActiveSubscription = seedProvider(planId, "Sem subscrição ativa", "APPROVED", "CANCELLED");
+        // Grace period (ADR-0011 §D4/ARQUITETURA §12.1): PAST_DUE com
+        // current_period_end ainda no futuro continua a conceder
+        // visibilidade — uma falha de cartão não desliga o prestador no
+        // mesmo instante.
+        providerInPastDueGracePeriod =
+                seedProvider(planId, "Grace period ativo", "APPROVED", "PAST_DUE", "now() + interval '30 days'");
+        // Fim do grace (ADR-0011 §D5): PAST_DUE cujo current_period_end já
+        // passou deixa de conceder visibilidade — o predicado não pode
+        // depender só do estado, sob pena de o job de expiração atrasar e o
+        // prestador continuar a operar sem pagar (falha aberta).
+        providerPastDueGraceExpired =
+                seedProvider(planId, "Grace period expirado", "APPROVED", "PAST_DUE", "now() - interval '1 day'");
         providerNotApproved = seedProvider(planId, "Não aprovado", "PENDING", "ACTIVE");
         providerMatchingRegion = seedProvider(planId, "Região correspondente", "APPROVED", "ACTIVE");
         providerNonMatchingRegion = seedProvider(planId, "Região não correspondente", "APPROVED", "ACTIVE");
@@ -98,6 +117,8 @@ class MatchingEligibilityTest {
         // distância ao ponto tem de incluir, não excluir (fronteira fechada).
         insertRadiusArea(providerExactBoundary, EXACT_DISTANCE_TO_LISBON_M);
         insertRadiusArea(providerNoActiveSubscription, 5_000);
+        insertRadiusArea(providerInPastDueGracePeriod, 5_000);
+        insertRadiusArea(providerPastDueGraceExpired, 5_000);
         insertRadiusArea(providerNotApproved, 5_000);
 
         insertRegionArea(providerMatchingRegion, "PT-11-LSB");
@@ -135,6 +156,20 @@ class MatchingEligibilityTest {
         var eligible = MATCHING_API.findEligibleProviderIds(CATEGORY_ID, LISBON, null);
 
         assertThat(eligible).doesNotContain(providerNoActiveSubscription);
+    }
+
+    @Test
+    void includesProviderInPastDueGracePeriod() {
+        var eligible = MATCHING_API.findEligibleProviderIds(CATEGORY_ID, LISBON, null);
+
+        assertThat(eligible).contains(providerInPastDueGracePeriod);
+    }
+
+    @Test
+    void excludesProviderWhosePastDueGracePeriodHasExpired() {
+        var eligible = MATCHING_API.findEligibleProviderIds(CATEGORY_ID, LISBON, null);
+
+        assertThat(eligible).doesNotContain(providerPastDueGraceExpired);
     }
 
     @Test
@@ -216,11 +251,29 @@ class MatchingEligibilityTest {
                 .param("lon", LISBON.lon(), java.sql.Types.DOUBLE)
                 .param("regionCode", (String) null, java.sql.Types.VARCHAR)
                 .param("maxRadiusM", pt.servimatch.modules.geo.CoverageSql.MAX_RADIUS_METERS)
+                .param("visibilityToleranceSeconds",
+                        pt.servimatch.modules.billing.SubscriptionVisibilitySql.DEFAULT_PERIOD_END_TOLERANCE_SECONDS)
                 .query(String.class)
                 .list());
     }
 
     private static UUID seedProvider(UUID planId, String headline, String approvalStatus, String subscriptionStatus) {
+        return seedProvider(planId, headline, approvalStatus, subscriptionStatus, "now() + interval '30 days'");
+    }
+
+    /**
+     * @param currentPeriodEndExpression expressão SQL literal (não
+     *                                    vinculada) para {@code current_period_end} — usada pelos
+     *                                    casos de fronteira do grace period de {@code PAST_DUE}
+     *                                    (ADR-0011 §D5); nunca vem de entrada externa, só de
+     *                                    literais fixos definidos neste teste.
+     */
+    private static UUID seedProvider(
+            UUID planId,
+            String headline,
+            String approvalStatus,
+            String subscriptionStatus,
+            String currentPeriodEndExpression) {
         UUID userId = UUID.randomUUID();
         UUID providerId = UUID.randomUUID();
         JDBC.sql("INSERT INTO users (id, keycloak_sub, email, display_name) VALUES (:id, :sub, :email, :name)")
@@ -229,9 +282,11 @@ class MatchingEligibilityTest {
                 .param("email", userId + "@example.test")
                 .param("name", headline)
                 .update();
+        // Sem visibility_state (ADR-0011 §D1): a coluna deixou de ser lida
+        // pelo predicado de produção, e este teste não a fabrica.
         JDBC.sql("""
-                INSERT INTO provider_profile (id, user_id, headline, approval_status, visibility_state)
-                VALUES (:id, :userId, :headline, :approval, 'VISIBLE')
+                INSERT INTO provider_profile (id, user_id, headline, approval_status)
+                VALUES (:id, :userId, :headline, :approval)
                 """)
                 .param("id", providerId)
                 .param("userId", userId)
@@ -240,10 +295,10 @@ class MatchingEligibilityTest {
                 .update();
         JDBC.sql("INSERT INTO provider_category (provider_id, category_id) VALUES (:p, :c)")
                 .param("p", providerId).param("c", CATEGORY_ID).update();
-        JDBC.sql("""
+        JDBC.sql(("""
                 INSERT INTO subscription (provider_id, plan_id, status, gateway, current_period_start, current_period_end)
-                VALUES (:p, :plan, :status, 'stripe', now(), now() + interval '30 days')
-                """)
+                VALUES (:p, :plan, :status, 'stripe', now(), %s)
+                """).formatted(currentPeriodEndExpression))
                 .param("p", providerId).param("plan", planId).param("status", subscriptionStatus).update();
         return providerId;
     }
@@ -283,8 +338,8 @@ class MatchingEligibilityTest {
                 """).param("categoryId", CATEGORY_ID).param("count", count).update();
 
         JDBC.sql("""
-                INSERT INTO provider_profile (id, user_id, headline, approval_status, visibility_state, rating_avg, rating_count)
-                SELECT gen_random_uuid(), u.id, 'Bulk provider', 'APPROVED', 'VISIBLE',
+                INSERT INTO provider_profile (id, user_id, headline, approval_status, rating_avg, rating_count)
+                SELECT gen_random_uuid(), u.id, 'Bulk provider', 'APPROVED',
                        (random() * 5)::numeric(3,2), (random() * 200)::int
                 FROM users u WHERE u.keycloak_sub LIKE 'it-bulk-' || :categoryId || '-%'
                 """).param("categoryId", CATEGORY_ID).update();

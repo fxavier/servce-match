@@ -62,6 +62,15 @@ class ProposalsController {
         return ResponseEntity.created(location).body(created);
     }
 
+    @GetMapping("/v1/proposals/me")
+    @PreAuthorize("hasRole('PROVIDER')")
+    ProposalPageDto listMyProposals(Authentication authentication,
+                                     @RequestParam(required = false) String cursor,
+                                     @RequestParam(required = false, defaultValue = "20") int limit) {
+        UUID userId = usersApi.ensureProvisioned(jwt(authentication));
+        return proposalsService.listMine(userId, cursor, Math.min(Math.max(limit, 1), 100));
+    }
+
     @PostMapping("/v1/proposals/{proposalId}/accept")
     @PreAuthorize("hasRole('CUSTOMER')")
     ProposalDto acceptProposal(Authentication authentication, @PathVariable UUID proposalId) {

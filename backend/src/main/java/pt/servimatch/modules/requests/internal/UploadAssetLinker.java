@@ -4,8 +4,11 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Vínculo {@code request_image} (V7) entre um pedido e os {@code imageId}
@@ -60,6 +63,37 @@ class UploadAssetLinker {
                         (UUID) rs.getObject("image_asset_id"),
                         rs.getInt("position")))
                 .list();
+    }
+
+    /**
+     * Variante em lote de {@link #findByRequestId(UUID)} para páginas
+     * inteiras ({@code RequestsService#toDtoPage}): uma única consulta para
+     * todos os {@code requestId} da página, nunca uma por pedido (CLAUDE.md
+     * — "imagens... da página inteira em uma query cada"). Devolve mapa
+     * agrupado por {@code request_id}; pedidos sem imagens ficam ausentes do
+     * mapa (o chamador usa {@code getOrDefault(id, List.of())}).
+     */
+    Map<UUID, List<RequestImageRow>> findByRequestIds(Collection<UUID> requestIds) {
+        if (requestIds.isEmpty()) {
+            return Map.of();
+        }
+        record Linked(UUID requestId, UUID imageAssetId, int position) {
+        }
+        List<Linked> rows = jdbcClient.sql("""
+                        SELECT request_id, image_asset_id, position
+                        FROM request_image
+                        WHERE request_id IN (:requestIds)
+                        ORDER BY request_id, position
+                        """)
+                .param("requestIds", requestIds)
+                .query((rs, rowNum) -> new Linked(
+                        (UUID) rs.getObject("request_id"),
+                        (UUID) rs.getObject("image_asset_id"),
+                        rs.getInt("position")))
+                .list();
+        return rows.stream().collect(Collectors.groupingBy(
+                Linked::requestId,
+                Collectors.mapping(l -> new RequestImageRow(l.imageAssetId(), l.position()), Collectors.toList())));
     }
 
 }

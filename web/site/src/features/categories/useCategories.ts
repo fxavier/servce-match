@@ -3,9 +3,8 @@ import { services } from '../../services';
 
 /**
  * Único ponto de leitura de categorias no cliente — sempre via
- * `services.categories.list()` (mock ou HTTP real, conforme
- * `VITE_USE_MOCKS`), nunca por import direto de fixtures fora de
- * `services/` (checklist §11).
+ * `services.categories.list()` (HTTP real contra o BFF), nunca por acesso
+ * direto a `services/http/*` fora de `services/`.
  */
 export function useCategories() {
   return useQuery({

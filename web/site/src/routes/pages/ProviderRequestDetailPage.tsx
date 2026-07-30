@@ -23,6 +23,13 @@ export function ProviderRequestDetailPage() {
     enabled: Boolean(requestId),
   });
 
+  // Avaliação real do próprio prestador para a pré-visualização do
+  // orçamento — nunca um valor fixo inventado no cliente.
+  const profileQuery = useQuery({
+    queryKey: ['providers', 'me'],
+    queryFn: () => services.providers.getMine(),
+  });
+
   if (!requestId) return null;
 
   if (requestQuery.isLoading) {
@@ -66,8 +73,8 @@ export function ProviderRequestDetailPage() {
               <ProposalForm
                 requestId={requestId}
                 providerName={user?.displayName ?? 'O seu perfil'}
-                providerRating={4.8}
-                providerRatingCount={0}
+                providerRating={profileQuery.data?.ratingAvg ?? 0}
+                providerRatingCount={profileQuery.data?.ratingCount ?? 0}
                 onSubscriptionRequired={() => setBlockedBySubscription(true)}
                 onSuccess={() => setSentProposal(true)}
               />

@@ -37,17 +37,34 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * bloqueado em todos os pontos simultaneamente, e destravado quando a
  * subscrição fica {@code ACTIVE}.
  *
- * <p>O listener {@code billing → providers} que escreve
+ * <p><b>Correção (auditoria qa-e2e, onda "dados-reais"):</b> esta javadoc
+ * afirmava que existe um listener {@code billing → providers} que escreve
  * {@code provider_profile.visibility_state} a partir de
- * {@code SubscriptionActivated}/{@code SubscriptionExpired} é do
- * {@code backend-payments} e já tem cobertura própria (não repetida aqui,
- * ver {@code SubscriptionLifecycleStateMachineTest}); este teste manipula
- * {@code visibility_state}/{@code subscription} diretamente por SQL para
- * representar o <b>resultado</b> desse listener em cada lado do
- * {@code gating}, tal como {@code RequestVisibilityIntegrationTest} e
- * {@code AcceptProposalIntegrationTest} já fazem — o que se prova aqui é
- * que {@code proposals}/{@code chat}/{@code search}/{@code providers} leem
- * esse resultado corretamente, não a máquina de estados que o produz.
+ * {@code SubscriptionActivated}/{@code SubscriptionExpired}. <b>Esse
+ * listener nunca existiu</b> — não há nenhum {@code @EventListener} para
+ * esses eventos em {@code providers} (o único consumidor de
+ * {@code SubscriptionActivated}/{@code SubscriptionExpired} é
+ * {@code notifications.SubscriptionNotificationListener}, que só dispara
+ * notificações) e não há nenhum {@code UPDATE provider_profile ...
+ * visibility_state} em produção. {@code ProvidersApi.checkEligibility} já
+ * documenta isto ("uma coluna sem nenhum escritor em produção — o defeito
+ * que o ADR fecha", ADR-0011) e deixou de ler {@code visibility_state};
+ * este teste continua a manipular {@code visibility_state} diretamente por
+ * SQL (nos <em>helpers</em> {@code insertProvider}/{@code
+ * activateSubscription}/{@code expireSubscription} abaixo) só para produzir
+ * o mesmo resultado que {@code ProvidersApi.checkEligibility} calcularia a
+ * partir de {@code SubscriptionLifecycle.isVisibilityEligible} — não porque
+ * exista um listener a produzir esse estado. {@code proposals}/{@code chat}
+ * (via {@code ProvidersApi.checkEligibility}) leem esse resultado
+ * corretamente hoje; {@code matching}/{@code search} <b>não</b> — ver
+ * {@link ProviderVisibilityWithoutBillingListenerIntegrationTest}, que
+ * prova (vermelho até correção do {@code backend-matching}) que
+ * {@code GET /v1/search/providers} continua a filtrar por
+ * {@code visibility_state} e por isso nunca lista nenhum prestador em
+ * produção, subscrito ou não. O {@code search: público, não aparece} mais
+ * abaixo neste teste "passa" mas não prova o comportamento de produção,
+ * porque força {@code visibility_state='VISIBLE'} — algo que nunca acontece
+ * fora deste teste.
  *
  * <p>Tokens sintéticos (skill {@code testcontainers-integration-test}:
  * "mock para a combinatória") — a cadeia de autenticação real já está

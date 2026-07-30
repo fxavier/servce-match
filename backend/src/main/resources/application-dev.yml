@@ -1,0 +1,15 @@
+# Perfil "dev" (ADR-0013): ambiente de desenvolvimento partilhado (não a
+# máquina do programador — ver "local" para isso, e não confundir com
+# `SPRING_PROFILES_ACTIVE=prod` de produção).
+#
+# Mesma decisão que "local": acrescenta `classpath:db/seed` às locations do
+# Flyway. Ver o comentário completo em application-local.yml — não repetido
+# aqui para não divergir por cópia. As duas camadas de barreira reais
+# (exclusão do artefacto e verificação de arranque) são as mesmas para os
+# dois perfis; esta linha é só a camada de conveniência (ADR-0013 D3.2).
+#
+# Ativação: SPRING_PROFILES_ACTIVE=dev
+
+spring:
+  flyway:
+    locations: classpath:db/migration,classpath:db/seed

@@ -6,12 +6,13 @@ const KEY = 'sm-request-draft';
  * `sessionStorage` — deliberado, não `localStorage`. A especificação
  * restringe `localStorage` à preferência de tema "e nada mais"; o
  * CLAUDE.md só proíbe **tokens** em `localStorage`/`sessionStorage`, nunca
- * dados de formulário. Precisamos de sobreviver a uma navegação de topo a
- * sério: no modo real, `login()` faz `window.location.href` para o BFF/
- * Keycloak, o que destrói toda a memória React — só armazenamento do
- * browser (não React state) atravessa isso. `sessionStorage` (não
- * `localStorage`) porque o rascunho só faz sentido durante esta visita —
- * não deve sobreviver ao fecho do separador nem acumular entre sessões.
+ * dados de formulário. O login (ADR-0012) já não faz navegação de topo —
+ * é um formulário próprio da SPA — mas o rascunho continua a precisar de
+ * sobreviver à mudança de rota entre `/pedidos/novo` e `/entrar`
+ * (desmonta o wizard) e a um recarregamento acidental da página.
+ * `sessionStorage` (não `localStorage`) porque o rascunho só faz sentido
+ * durante esta visita — não deve sobreviver ao fecho do separador nem
+ * acumular entre sessões.
  */
 export function saveDraft(draft: WizardDraft): void {
   try {

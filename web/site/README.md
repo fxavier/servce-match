@@ -4,64 +4,63 @@ Cliente web do ServiMatch: React 19 + Vite 7 + TypeScript strict + Tailwind
 CSS v4. É a aplicação de frontend única do produto — substitui a SPA anterior
 (`web/app`, removida). Fala sempre através do BFF (`web/bff`) em `/api` e
 `/auth`; nunca diretamente com o backend Java nem com o Keycloak
-(ADR-0002).
+(ADR-0002, ADR-0012).
 
 ## Arrancar
 
 ```bash
 cd web              # a partir da raiz do monorepo
 npm install          # workspaces: site + bff
-npm run dev:site     # http://localhost:5173, VITE_USE_MOCKS=true por omissão
+cp bff/.env.example bff/.env   # preenche as variáveis do Keycloak local (infra/README.md)
+npm run dev:bff --workspace bff    # noutro terminal — http://localhost:4000
+npm run dev:site                    # http://localhost:5173
 ```
 
-Isto arranca **sem qualquer serviço externo**: dados portugueses credíveis
-(31 categorias reais, 24 prestadores, 18 pedidos, 40 propostas, 3 planos —
-confirmados contra o backend local a correr, ver `src/services/mock/fixtures/`),
-latência artificial de 300–800 ms, cenários de erro RFC 9457 incluídos.
+O site fala sempre com o backend real através do BFF (`/api`, `/auth`) — não
+há modo mock nem `VITE_USE_MOCKS`. Os dados de desenvolvimento vivem na base
+de dados (seed dev-only, ADR-0013) e chegam pelo backend real: sem
+PostgreSQL + Keycloak (`docker compose up` na raiz do monorepo) a correr,
+não há ecrã com dados. É o preço documentado no ADR-0013 D7 de a SPA ser
+desenvolvida contra a API que vai para produção, não contra fixtures no
+cliente.
 
-Para testar contra o BFF + backend reais:
+## Autenticação sem IdP visível (ADR-0012)
 
-```bash
-cp .env.example .env
-# edita .env: VITE_USE_MOCKS=false
-npm run dev:bff --workspace bff     # noutro terminal, ver web/bff/README/.env.example
-npm run dev:site
-```
+Registo e login são formulários próprios da SPA (`/registar`, `/entrar`) —
+o utilizador nunca vê o Keycloak, nem um redirect, nem a palavra "Keycloak"
+em mensagem de erro. Consomem `POST /auth/register`/`POST /auth/login` no
+BFF, que fala com o Keycloak *server-to-server* (Admin REST API para criar a
+conta, Direct Access Grant para autenticar) — nenhum token, password ou
+perfil sensível chega a `localStorage`/`sessionStorage`; a única fonte de
+verdade da sessão no cliente é `GET /auth/me`
+(`src/features/auth/AuthContext.tsx`).
 
-## Mock ↔ backend real (`VITE_USE_MOCKS`)
-
-Um único ponto de decisão: `src/services/index.ts`. Todo o resto da app
-importa `services` daí — nenhum componente sabe se está em modo mock.
-
-| | `VITE_USE_MOCKS=true` (default em dev) | `VITE_USE_MOCKS=false` |
-|---|---|---|
-| Dados | `src/services/mock/*` — fixtures + latência simulada, tudo em memória | `src/services/http/*` — `openapi-fetch` contra `VITE_API_BASE` (BFF) |
-| Autenticação | `/entrar` mostra um seletor de 3 perfis de demonstração, sessão só em `React state` (nunca `localStorage`/`sessionStorage`) | `/entrar` mostra um único botão "Entrar com o Keycloak" → `window.location.href = '/auth/login?returnTo=...'` (BFF, Authorization Code + PKCE real, cookie `HttpOnly`) |
-| Gating de subscrição | Simulado no mock (ver painel de dev) | Decidido pelo backend real (403 `subscription-required`) |
+- O login demora ~1s por desenho (piso de latência anti-enumeração no BFF,
+  ADR-0012 D7.4): o botão fica desativado, sem duplo submit, e o cliente
+  nunca tenta "otimizar" esse tempo.
+- **Nunca distingas na UI** "email não existe" de "password errada" — o BFF
+  devolve deliberadamente a mesma resposta.
+- O registo é a única exceção documentada: um email já registado devolve
+  `409 email-already-registered` (ver comentário em
+  `web/bff/src/routes/auth.ts`) — o utilizador precisa de saber para poder
+  agir. O login continua estritamente indistinguível.
+- Reencaminhamento pós-sessão usa `returnTo` sanitizado
+  (`src/lib/returnTo.ts`, espelha `web/bff/src/routes/auth.ts::sanitizeReturnTo`)
+  num único ponto de navegação por ecrã (`LoginPage`/`RegisterPage`) — nunca
+  dois `replace` concorrentes.
 
 O toggle de tema claro/escuro é a **única** exceção a "nunca localStorage" —
 guarda só a preferência (`sm-theme`), nunca sessão nem tokens. O rascunho do
 assistente de publicação de pedido (`/pedidos/novo`) usa `sessionStorage`
-(não `localStorage`) para sobreviver ao redirect de topo do login real — ver
-comentário em `src/features/requests/draftStorage.ts`.
-
-## Contas de demonstração (modo mock)
-
-| Perfil | Email (mesmo do realm Keycloak local) | O que mostra |
-|---|---|---|
-| Cliente | `customer.test@servimatch.pt` | Publica pedidos, vê propostas, aceita orçamentos |
-| Prestador — subscrição ativa | `provider.test@servimatch.pt` | Inbox completa, pode enviar orçamentos |
-| Prestador — sem subscrição | `provider.trial@servimatch.pt` (só existe no mock) | Painel de upsell desfocado em vez da inbox/formulário |
-
-Painel de dev (canto inferior direito, só visível autenticado como
-prestador em modo mock): toggle "Simular subscrição ativa" para alternar
-entre os dois estados de gating sem trocar de conta.
+(não `localStorage`), para sobreviver a uma navegação de topo/recarregamento
+— ver comentário em `src/features/requests/draftStorage.ts`.
 
 ## Mapa de rotas
 
 Públicas (sem login, indexáveis): `/`, `/como-funciona`, `/categorias`,
 `/servicos/:slug`, `/prestadores`, `/prestadores/:id`, `/precos`, `/sobre`,
-`/contactos`, `/faq`, `/termos`, `/privacidade`, `/entrar`, `*` (404).
+`/contactos`, `/faq`, `/termos`, `/privacidade`, `/entrar`, `/registar`, `*`
+(404).
 
 Autenticadas — cliente (`role: CUSTOMER`): `/pedidos/novo` (público até
 publicar — o login só aparece no momento de submeter), `/painel`,
@@ -92,66 +91,66 @@ Gera `src/api/generated/schema.d.ts` a partir de
 propósito (deteta deriva contrato ↔ código na pipeline). Nunca editar à
 mão — `src/services/types.ts` é o único ponto do resto da app que importa
 o schema gerado. O cliente real (`openapi-fetch`) vive em
-`src/services/http.ts`; os únicos `fetch` escritos à mão são os três
-endpoints do BFF (`/auth/me`, `/auth/login`, `/auth/logout` —
-`src/features/auth/bffClient.ts`), que não fazem parte do contrato
-OpenAPI (ADR-0009).
+`src/services/http.ts`, e `src/services/http/*` é a **única** implementação
+de cada serviço (sem bifurcação mock/HTTP — `src/services/index.ts` exporta
+sempre a versão HTTP real). Os únicos `fetch` escritos à mão são os quatro
+endpoints de sessão do BFF (`/auth/me`, `/auth/login`, `/auth/register`,
+`/auth/logout` — `src/features/auth/bffClient.ts`), que não fazem parte do
+contrato OpenAPI (ADR-0009/ADR-0012 D1: é infraestrutura de sessão do
+cliente web, não uma capacidade de domínio partilhada com o mobile).
 
-## O que falta ligar ao backend real
+## Estado do contrato
 
-Construir este site expôs lacunas no contrato — capacidades que a UI
-precisa mas que `docs/api/openapi.yaml` ainda não expõe. Documentadas em
-detalhe em `src/services/domainTypes.ts` e `src/services/http/*`
-(cada método "gap" chama `notImplementedInContract(...)`, devolvendo um
-`ProblemDetails` 501 explícito em vez de inventar dados ou um endpoint):
+Todos os endpoints que este site precisa já existem em
+`docs/api/openapi.yaml`: perfil público do prestador
+(`GET /v1/providers/{id}`), avaliações (`GET /v1/providers/{id}/reviews`),
+perfil editável (`GET`/`PUT /v1/providers/me`), lista de conversas
+(`GET /v1/conversations`), estado da subscrição (`GET /v1/subscriptions/me`,
+`404` = nunca subscreveu, não um valor `NONE` no enum), detalhe de marcação
+(`GET /v1/bookings/{bookingId}`), os meus pedidos (`GET /v1/requests`) e as
+minhas propostas (`GET /v1/proposals/me`).
 
-1. **Perfil público completo do prestador** — falta `GET /v1/providers/{id}`
-   (bio, portfólio, zonas, distribuição de estrelas). O contrato só tem
-   `ProviderSummary` (pesquisa/propostas).
-2. **Lista de conversas** — falta `GET /v1/conversations`. O contrato só
-   tem `GET /v1/conversations/{conversationId}/messages`.
-3. **Estado da subscrição atual** — falta `GET /v1/subscriptions/me`. O
-   contrato só tem `POST /v1/subscriptions` (iniciar checkout).
-4. **Perfil editável do prestador** — falta `GET`/`PUT /v1/providers/me`
-   (categorias, zonas, portfólio).
-5. **Detalhe de uma `Booking`** — falta `GET /v1/bookings/{id}`. Só existe
-   `POST .../complete`.
-6. **Lista dos meus pedidos (cliente)** — falta `GET /v1/requests` com
-   filtro por dono. Só existe `POST` (criar) e `GET` por id.
-7. **Lista "as minhas propostas" (prestador)** — falta um endpoint
-   dedicado; hoje só existe por pedido (`GET /v1/requests/{id}/proposals`)
-   ou a inbox de pedidos elegíveis.
-8. **Avaliações de um prestador** — falta `GET /v1/reviews?targetId=`. Só
-   existe `POST /v1/reviews` (criar).
-9. **Agregados do dashboard do prestador** — sem endpoint de estatísticas;
-   o dashboard deriva o que consegue de `GET /v1/providers/me/requests` e
-   mostra zero em vez de inventar números.
+Duas lacunas conhecidas, ainda pendentes de pedido formal ao
+`api-contract` (não contornadas com dados inventados no cliente):
 
-Nenhum destes foi contornado com dados inventados — em modo mock estão
-totalmente simulados (dão a experiência completa); em modo HTTP real
-devolvem um erro explícito e acionável, nunca um crash nem um número
-fictício. Pedidos formais de extensão do contrato ficam para o
-`api-contract`.
+1. **Agregados do dashboard do prestador** — sem endpoint de estatísticas
+   dedicado; `services/http/providerDashboardService.ts` deriva o que
+   consegue de `GET /v1/providers/me/requests`, `GET /v1/proposals/me` e
+   `GET /v1/subscriptions/me`, e mostra zero em vez de inventar números
+   (`estimatedRevenue`, `last30Days`).
+2. **Correspondência `categoryIds`/`portfolioImageIds` no perfil editável**
+   — `GET /v1/providers/me` devolve `categoryNames` (texto) e
+   `portfolioImageUrls` (URLs assinados), mas `PUT` exige `categoryIds` e
+   `portfolioImageIds`. A pré-seleção de categorias junta pelo nome (melhor
+   esforço); o portfólio não tem forma de ser preservado num `PUT` de
+   substituição total sem os IDs — `ProviderProfileEditPage` pede
+   confirmação explícita antes de gravar se já existirem fotos.
 
-Duas simplificações deliberadas, não bloqueantes: (a) a contagem de
-"profissionais ativos" por categoria não é mostrada em `/categorias` nem
-na grelha da landing — não há agregado desse tipo no contrato; (b) o botão
-"Conversar" numa proposta leva à lista de conversas (`/conversas`), não a
-uma conversa específica — o contrato não liga `Proposal` a
-`Conversation`.
+Uma simplificação deliberada, não bloqueante: `GET /v1/search/providers`
+devolve `ProviderSummary` (sem `location`), por isso a pesquisa de
+prestadores não tem vista de mapa — só lista. Fabricar uma localização por
+omissão no cliente seria pior do que não ter mapa nenhum.
 
 ## Testes
 
 ```bash
-npm run test --workspace site       # Vitest — unitários + componente
+npm run test --workspace site       # Vitest — unitários + componente, fetch mockado
 npm run test:e2e                    # a partir de web/ — Playwright, fluxo crítico real
 ```
 
+Sem camada de mocks para os dados de domínio, os testes de componente que
+exercitam `services/http/*` mockam `global.fetch` diretamente (ver
+`src/test/mockFetch.ts` e `src/features/auth/bffClient.test.ts`,
+`src/services/http/*.test.ts`) — nunca MSW nem uma segunda implementação de
+serviço.
+
 `test:e2e` sobe (via `webServer` do Playwright) um Keycloak falso
-(`oauth2-mock-server`, Authorization Code + PKCE real), um backend de
-domínio falso derivado do contrato, o BFF real e este site com
-`VITE_USE_MOCKS=false` — testa o caminho de autenticação real e o cliente
-HTTP gerado, não a camada de mocks.
+(`oauth2-mock-server`, Direct Access Grant + client credentials — já não
+Authorization Code + PKCE, ADR-0012), uma Admin REST API falsa
+(`../e2e/mock-oidc/server.ts`, só os quatro pedidos que o registo usa), um
+backend de domínio falso derivado do contrato (`../e2e/mock-backend`), o BFF
+real e este site — testa o caminho de registo/login real do BFF e o cliente
+HTTP gerado, nunca uma camada de mocks do cliente (que não existe).
 
 ## Qualidade
 

@@ -12,6 +12,20 @@
 spring:
   autoconfigure:
     exclude: []
+  datasource:
+    hikari:
+      # Ver comentário equivalente em application-notifications-it.yml. Este
+      # é o perfil mais reutilizado (10 classes de teste, cada uma com o seu
+      # próprio contexto por causa do @DynamicPropertySource específico da
+      # classe) — era o maior contribuinte para o esgotamento de ligações.
+      # Confirmado (grep por ExecutorService/Thread/CompletableFuture/Latch
+      # em backend/src/test/java): nenhum teste destes módulos depende de
+      # concorrência real dentro de um único contexto, incluindo
+      # ListConversationsIntegrationTest (o `Thread.sleep` aí é só para
+      # ordenar timestamps, não é execução paralela) — 2 chega e nunca
+      # bloqueia.
+      maximum-pool-size: 2
+      minimum-idle: 1
   flyway:
     locations: classpath:db/migration
     baseline-on-migrate: false

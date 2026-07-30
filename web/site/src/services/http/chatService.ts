@@ -1,12 +1,12 @@
 import { throwProblem } from '../../lib/problem';
 import { api } from '../http';
 import type { ChatService } from '../interfaces';
-import { notImplementedInContract } from './notImplemented';
 
 export const chatServiceHttp: ChatService = {
-  listConversations() {
-    // Gap #2 — sem GET /v1/conversations (lista) no contrato.
-    return notImplementedInContract('lista de conversas');
+  async listConversations() {
+    const { data, error } = await api.GET('/v1/conversations', { params: { query: { limit: 50 } } });
+    if (error) throwProblem(error);
+    return data.items;
   },
   async listMessages(conversationId, params) {
     const { data, error } = await api.GET('/v1/conversations/{conversationId}/messages', {

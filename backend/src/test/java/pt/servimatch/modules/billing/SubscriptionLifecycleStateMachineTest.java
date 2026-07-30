@@ -12,6 +12,7 @@ import pt.servimatch.testsupport.TestDatabase;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -130,5 +131,74 @@ class SubscriptionLifecycleStateMachineTest {
         lifecycle.markPastDue(subscription.id(), Instant.now());
         assertThat(lifecycle.hasActiveSubscription(provider)).isFalse();
         assertThat(lifecycle.isVisibilityEligible(provider)).isTrue();
+    }
+
+    // --- ADR-0011 D5: current_period_end passa a fazer parte do gating de visibilidade ---
+
+    @Test
+    void visibilityEligibilityDeniesWhenPeriodEndHasAlreadyPassed() {
+        // Simula o job de expiração (SubscriptionPeriodEndJob) ainda não ter corrido:
+        // status continua ACTIVE mas o período já terminou. Sem o requisito de
+        // current_period_end, isto seria uma falha aberta (ADR-0011 D5).
+        UUID provider = providerId();
+        Subscription subscription = lifecycle.createPending(provider, planId(), "stripe");
+        lifecycle.activate(subscription.id(), Instant.now().minusSeconds(4000), Instant.now().minusSeconds(1), Instant.now());
+
+        assertThat(lifecycle.isVisibilityEligible(provider)).isFalse();
+    }
+
+    @Test
+    void visibilityEligibilityDeniesPastDueThatNeverHadAPeriod() {
+        // PENDING cujo primeiro pagamento falha vai a PAST_DUE sem nunca ter tido
+        // current_period_end (NULL). NULL >= tolerância dá "desconhecido" em SQL,
+        // que nega — deliberado, não se "corrige" com COALESCE (ADR-0011 D5).
+        UUID provider = providerId();
+        Subscription subscription = lifecycle.createPending(provider, planId(), "stripe");
+
+        Subscription pastDue = lifecycle.markPastDue(subscription.id(), Instant.now());
+
+        assertThat(pastDue.currentPeriodEnd()).isNull();
+        assertThat(pastDue.status().grantsVisibility()).isTrue();
+        assertThat(lifecycle.isVisibilityEligible(provider)).isFalse();
+    }
+
+    // --- GET /v1/subscriptions/me: findMostRecentByProvider ---
+
+    @Test
+    void mostRecentByProviderIsEmptyWhenProviderNeverSubscribed() {
+        UUID provider = providerId();
+        assertThat(lifecycle.findMostRecentByProvider(provider)).isEmpty();
+    }
+
+    @Test
+    void mostRecentByProviderReturnsTheOnlyTerminalRecordInsteadOfEmpty() {
+        // Contrato de GET /v1/subscriptions/me: 404 só quando o prestador NUNCA
+        // subscreveu — não quando o histórico é só terminal. findMostRecentByProvider
+        // não filtra por estado; é essa a diferença face a findByProvider (não-terminal).
+        UUID provider = providerId();
+        Subscription subscription = lifecycle.createPending(provider, planId(), "stripe");
+        lifecycle.activate(subscription.id(), Instant.now(), Instant.now().plusSeconds(10), Instant.now());
+        lifecycle.expire(subscription.id(), Instant.now());
+
+        Optional<Subscription> mostRecent = lifecycle.findMostRecentByProvider(provider);
+
+        assertThat(mostRecent).isPresent();
+        assertThat(mostRecent.get().status()).isEqualTo(SubscriptionStatus.EXPIRED);
+        assertThat(lifecycle.findByProvider(provider)).isEmpty();
+    }
+
+    @Test
+    void mostRecentByProviderReturnsTheLatestRowAcrossMultipleCycles() {
+        UUID provider = providerId();
+        Subscription first = lifecycle.createPending(provider, planId(), "stripe");
+        lifecycle.cancel(first.id(), Instant.now());
+
+        Subscription second = lifecycle.createPending(provider, planId(), "eupago");
+
+        Optional<Subscription> mostRecent = lifecycle.findMostRecentByProvider(provider);
+
+        assertThat(mostRecent).isPresent();
+        assertThat(mostRecent.get().id()).isEqualTo(second.id());
+        assertThat(mostRecent.get().status()).isEqualTo(SubscriptionStatus.PENDING);
     }
 }

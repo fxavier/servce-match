@@ -46,5 +46,14 @@ export type ProposalPage = Schemas['ProposalPage'];
 export type ServiceRequestPage = Schemas['ServiceRequestPage'];
 export type ProviderSummaryPage = Schemas['ProviderSummaryPage'];
 export type MessagePage = Schemas['MessagePage'];
+export type ProviderZone = Schemas['ProviderZone'];
+export type RatingDistribution = Schemas['RatingDistribution'];
+export type ProviderProfile = Schemas['ProviderProfile'];
+export type UpdateProviderProfile = Schemas['UpdateProviderProfile'];
+export type ConversationSummary = Schemas['ConversationSummary'];
+export type ConversationPage = Schemas['ConversationPage'];
+export type BookingDetail = Schemas['BookingDetail'];
+export type ReviewWithAuthor = Schemas['ReviewWithAuthor'];
+export type ReviewWithAuthorPage = Schemas['ReviewWithAuthorPage'];
 
 export type ApiOperations = operations;

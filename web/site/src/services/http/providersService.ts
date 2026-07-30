@@ -1,28 +1,14 @@
 import { throwProblem } from '../../lib/problem';
-import type { ProviderProfile } from '../domainTypes';
 import { api } from '../http';
 import type { ProvidersService } from '../interfaces';
-import type { ProviderSummary } from '../types';
-import { notImplementedInContract } from './notImplemented';
 
 /**
- * O contrato só devolve `ProviderSummary` (pesquisa/propostas) — sem bio,
- * portfólio, zonas ou distribuição de estrelas (gap #1, ver domainTypes.ts).
- * Degrada com defaults vazios em vez de inventar dados.
+ * `GET /v1/search/providers` devolve `ProviderSummary` — sem `bio`,
+ * `location`, zonas nem portfólio (só `GET /v1/providers/{id}`/`me` têm
+ * isso). Devolver `ProviderSummary` tal como veio, em vez de fabricar um
+ * `ProviderProfile` com valores por omissão (ex. localização fixa em
+ * Lisboa) — um marcador de mapa inventado é pior do que não ter mapa.
  */
-function toProfile(summary: ProviderSummary): ProviderProfile {
-  return {
-    ...summary,
-    bio: '',
-    categoryNames: [],
-    zones: [],
-    location: { lat: 38.7223, lon: -9.1393 },
-    ratingDistribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 },
-    portfolioImageUrls: [],
-    memberSince: new Date().toISOString(),
-  };
-}
-
 export const providersServiceHttp: ProvidersService = {
   async search(params) {
     const { data, error } = await api.GET('/v1/search/providers', {
@@ -39,15 +25,26 @@ export const providersServiceHttp: ProvidersService = {
       },
     });
     if (error) throwProblem(error);
-    return { items: data.items.map(toProfile), page: data.page };
+    return data;
   },
-  get() {
-    // Gap #1 — sem GET /v1/providers/{id} no contrato.
-    return notImplementedInContract('perfil público detalhado do prestador');
+  async get(id) {
+    const { data, error } = await api.GET('/v1/providers/{providerId}', { params: { path: { providerId: id } } });
+    if (error) throwProblem(error);
+    return data;
   },
   async featured(limit = 6) {
     const { data, error } = await api.GET('/v1/search/providers', { params: { query: { limit } } });
     if (error) throwProblem(error);
-    return data.items.map(toProfile);
+    return data.items;
+  },
+  async getMine() {
+    const { data, error } = await api.GET('/v1/providers/me');
+    if (error) throwProblem(error);
+    return data;
+  },
+  async updateMine(body) {
+    const { data, error } = await api.PUT('/v1/providers/me', { body });
+    if (error) throwProblem(error);
+    return data;
   },
 };

@@ -165,14 +165,18 @@ describe('BFF — fluxo Authorization Code + PKCE ponta a ponta', () => {
     expect(proposalRes.headers['content-type']).toContain('application/problem+json');
     expect(proposalRes.body.type).toBe('https://errors.servimatch.pt/subscription-required');
 
-    // 6) Logout: destrói a sessão do BFF e devolve o URL para terminar o SSO no Keycloak.
+    // 6) Logout: destrói a sessão do BFF e revoga o refresh token. Contrato
+    // NOVO (ADR-0012 D3): 204 sem corpo, nunca `logoutUrl` — o utilizador
+    // nunca navega para o Keycloak, por isso não há URL de fim de sessão SSO
+    // a devolver. Perde-se o fim de sessão SSO no Keycloak (consequência
+    // aceite conscientemente pelo ADR).
     const logoutRes = await request(app)
       .post('/auth/logout')
       .set('Cookie', [sessionCookie!, csrfCookie!])
       .set('X-CSRF-Token', csrfToken);
 
-    expect(logoutRes.status).toBe(200);
-    expect(logoutRes.body.logoutUrl).toContain('https://kc.test/realms/servimatch/protocol/openid-connect/logout');
+    expect(logoutRes.status).toBe(204);
+    expect(logoutRes.body).toEqual({});
     expect(revokedTokens).toContain('refresh-abc');
     const clearedSessionCookie = pickCookie(logoutRes, 'sm_sid');
     expect(clearedSessionCookie).toBe('sm_sid=');

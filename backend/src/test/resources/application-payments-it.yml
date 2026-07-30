@@ -11,6 +11,18 @@
 spring:
   autoconfigure:
     exclude: []
+  datasource:
+    hikari:
+      # Ver comentário equivalente em application-notifications-it.yml:
+      # cada classe de teste com @ActiveProfiles("payments-it") arranca o
+      # seu próprio ApplicationContext/pool Hikari (o @DynamicPropertySource
+      # é específico da classe, o que impede a partilha de contexto mesmo
+      # com o mesmo nome de perfil), e todos ficam em cache vivos em
+      # simultâneo até ao fim da JVM — a soma dos pools default (10) contra
+      # o mesmo SharedPostgis esgotava `max_connections`. Nenhum teste deste
+      # módulo depende de concorrência real dentro de um único contexto.
+      maximum-pool-size: 2
+      minimum-idle: 1
   flyway:
     locations: classpath:db/migration
     baseline-on-migrate: false

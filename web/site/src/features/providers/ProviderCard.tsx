@@ -1,13 +1,18 @@
-import { BadgeCheck, MapPin, Sparkles } from 'lucide-react';
+import { BadgeCheck, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Avatar } from '../../components/ui/Avatar';
 import { Badge } from '../../components/ui/Badge';
 import { Card } from '../../components/ui/Card';
 import { RatingStars } from '../../components/ui/RatingStars';
-import type { ProviderProfile } from '../../services/domainTypes';
+import type { ProviderSummary } from '../../services/types';
 
 export interface ProviderCardProps {
-  provider: ProviderProfile;
+  /**
+   * `ProviderSummary` (pesquisa/destaque) — sem `categoryNames`/`zones`, que
+   * só existem no perfil completo (`GET /v1/providers/{id}`, ver
+   * `ProviderProfilePage`). Este cartão não os fabrica.
+   */
+  provider: ProviderSummary;
 }
 
 export function ProviderCard({ provider }: ProviderCardProps) {
@@ -19,7 +24,7 @@ export function ProviderCard({ provider }: ProviderCardProps) {
             <Avatar name={provider.displayName} imageUrl={provider.avatarUrl} />
             <div>
               <p className="text-card-title font-display font-semibold text-foreground">{provider.displayName}</p>
-              <p className="line-clamp-1 text-caption text-muted">{provider.headline}</p>
+              {provider.headline ? <p className="line-clamp-1 text-caption text-muted">{provider.headline}</p> : null}
             </div>
           </div>
           {provider.premiumBadge ? (
@@ -31,25 +36,13 @@ export function ProviderCard({ provider }: ProviderCardProps) {
 
         <RatingStars value={provider.ratingAvg} count={provider.ratingCount} />
 
-        <div className="flex flex-wrap gap-1.5">
-          {provider.categoryNames.slice(0, 2).map((name) => (
-            <Badge key={name} tone="neutral">
-              {name}
-            </Badge>
-          ))}
-          {provider.verified ? (
+        {provider.verified ? (
+          <div className="flex flex-wrap gap-1.5">
             <Badge tone="signal">
               <BadgeCheck aria-hidden="true" className="size-3.5" strokeWidth={1.5} />
               Verificado
             </Badge>
-          ) : null}
-        </div>
-
-        {provider.zones[0] ? (
-          <p className="flex items-center gap-1 text-caption text-muted">
-            <MapPin aria-hidden="true" className="size-3.5" strokeWidth={1.5} />
-            {provider.zones.map((zone) => zone.label).join(', ')}
-          </p>
+          </div>
         ) : null}
       </Link>
     </Card>

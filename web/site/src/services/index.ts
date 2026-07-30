@@ -8,45 +8,23 @@ import { reviewsServiceHttp } from './http/reviewsService';
 import { subscriptionsServiceHttp } from './http/subscriptionsService';
 import { uploadsServiceHttp } from './http/uploadsService';
 import type { Services } from './interfaces';
-import { categoriesServiceMock } from './mock/categoriesService';
-import { chatServiceMock } from './mock/chatService';
-import { providerDashboardServiceMock } from './mock/providerDashboardService';
-import { providersServiceMock } from './mock/providersService';
-import { proposalsServiceMock } from './mock/proposalsService';
-import { requestsServiceMock } from './mock/requestsService';
-import { reviewsServiceMock } from './mock/reviewsService';
-import { subscriptionsServiceMock } from './mock/subscriptionsService';
-import { uploadsServiceMock } from './mock/uploadsService';
 
 /**
- * Único ponto de decisão mock ↔ HTTP real (§8.4). `VITE_USE_MOCKS=true` por
- * omissão em dev — nenhum componente faz `if (mock)`, todos importam
- * `services` daqui.
+ * Único ponto de composição dos serviços (§8.4). Sempre a implementação
+ * HTTP real (`openapi-fetch` contra o BFF) — os dados de desenvolvimento
+ * vivem na base de dados (seed dev-only, ADR-0013) e chegam pelo backend
+ * real, não por uma camada de mocks no cliente (ADR-0013 D7).
  */
-export const USE_MOCKS = import.meta.env.VITE_USE_MOCKS !== 'false';
-
-export const services: Services = USE_MOCKS
-  ? {
-      categories: categoriesServiceMock,
-      providers: providersServiceMock,
-      requests: requestsServiceMock,
-      proposals: proposalsServiceMock,
-      chat: chatServiceMock,
-      reviews: reviewsServiceMock,
-      subscriptions: subscriptionsServiceMock,
-      uploads: uploadsServiceMock,
-      providerDashboard: providerDashboardServiceMock,
-    }
-  : {
-      categories: categoriesServiceHttp,
-      providers: providersServiceHttp,
-      requests: requestsServiceHttp,
-      proposals: proposalsServiceHttp,
-      chat: chatServiceHttp,
-      reviews: reviewsServiceHttp,
-      subscriptions: subscriptionsServiceHttp,
-      uploads: uploadsServiceHttp,
-      providerDashboard: providerDashboardServiceHttp,
-    };
+export const services: Services = {
+  categories: categoriesServiceHttp,
+  providers: providersServiceHttp,
+  requests: requestsServiceHttp,
+  proposals: proposalsServiceHttp,
+  chat: chatServiceHttp,
+  reviews: reviewsServiceHttp,
+  subscriptions: subscriptionsServiceHttp,
+  uploads: uploadsServiceHttp,
+  providerDashboard: providerDashboardServiceHttp,
+};
 
 export * from './interfaces';

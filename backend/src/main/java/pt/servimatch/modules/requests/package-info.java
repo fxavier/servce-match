@@ -39,6 +39,11 @@
  *       {@code arquiteto}/{@code backend-matching} decidirem se vale a pena
  *       remover o vazamento de tipo.</li>
  * </ul>
+ *
+ * <p>Inalterado na revisão "dados-reais" (Onda 1): {@code GET /v1/requests}
+ * (listar os meus pedidos, {@code role CUSTOMER}, ainda por implementar)
+ * não precisa de nenhuma dependência nova — filtra {@code service_request}
+ * pelo {@code customerId} autenticado, já resolvido por {@code UsersApi}.
  */
 @org.springframework.modulith.ApplicationModule(
         displayName = "Requests",
