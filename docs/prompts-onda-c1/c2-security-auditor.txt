@@ -1,0 +1,24 @@
+Usa o agente security-auditor. Modo leitura apenas — não corrijas nada, relata.
+
+Contexto: docs/ESTADO-DO-SISTEMA.md. Esta onda fechou C1, C3.1 e C4. Reaudita.
+
+1. C1 — PATCH /v1/admin/providers/{id}/approval: autorização ROLE_ADMIN efetiva e
+   não contornável; sem oráculo de enumeração no par 403/404; transições sem
+   caminho para reverter a PENDING; compare-and-set seguro sob concorrência;
+   reason (PII potencial) fora de logs, métricas e corpos de erro; audit_log sem
+   PII e na mesma transação; Idempotency-Key sem replay indevido.
+2. C3.1 — registo: mesmo status, mesmo corpo e mesmo tempo para email novo e
+   existente. Verifica a temporização a sério, não só o status code. Confirma que
+   nenhum comentário ou nome de teste cita um ADR para autorizar uma divergência
+   que o ADR proíbe.
+3. C4 — listInbox: ?status= com valores inesperados não devolve pedidos DRAFT nem
+   morada de clientes. Testa também maiúsculas/minúsculas, valores duplicados e
+   lista separada por vírgulas.
+4. Regressões: confirma que nenhum invariante do CLAUDE.md §4 se degradou nesta
+   onda. Em especial os que a onda-1 acabou de fechar — rate limiting em
+   /auth/**, SeedLocationsGuard, e visibility_state fora dos predicados.
+5. Controlo de processo: para cada citação de ADR nova em comentário ou nome de
+   teste que autorize uma divergência de invariante, verifica o texto do ADR.
+   Foi assim que C3.1 passou.
+
+Reporta com severidade e evidência ficheiro:linha.

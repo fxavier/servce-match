@@ -1,0 +1,35 @@
+Usa o agente db-migrations. Lê primeiro CLAUDE.md, docs/adr/0011-*.md e a skill
+flyway-postgis-migration.
+
+Contexto: docs/ESTADO-DO-SISTEMA.md, defeito C1. provider_profile.approval_status
+é lido por predicados de elegibilidade e nunca escrito em produção. Vamos
+implementar PATCH /v1/admin/providers/{providerId}/approval, que precisa de
+persistir quem decidiu, quando e porquê.
+
+Tarefa: cria V17__provider_approval_decision.sql com as colunas que hoje faltam
+em provider_profile:
+- approval_reason      TEXT NULL          (motivo da decisão; obrigatório no
+                                           serviço para REJECTED/SUSPENDED, mas
+                                           nullable no schema porque APPROVED
+                                           pode não ter motivo)
+- approval_decided_by  UUID NULL REFERENCES users(id) ON DELETE SET NULL
+- approval_decided_at  TIMESTAMPTZ NULL
+
+Restrições e verificações:
+- NÃO toques no CHECK de approval_status: V4:27 já aceita
+  ('PENDING','APPROVED','REJECTED','SUSPENDED'). Confirma antes de escrever.
+- Nullable é correto: as linhas existentes estão em PENDING e nunca foram
+  decididas. Não inventes um DEFAULT nem faças backfill.
+- Acrescenta um CHECK de coerência: se approval_status <> 'PENDING' então
+  approval_decided_by e approval_decided_at são NOT NULL. Justifica em comentário
+  SQL. Verifica que as linhas existentes (todas PENDING) satisfazem o CHECK.
+- Índice: avalia se idx_provider_profile_visibility (V4:53, sobre
+  (visibility_state, approval_status)) ainda faz sentido agora que
+  visibility_state saiu de todos os predicados de produção — o ADR-0011 D1 manda
+  substituí-lo por um índice só sobre approval_status. Se concordares, fá-lo
+  nesta migração e explica porquê; se discordares, di-lo e não mexas.
+- Comentário de cabeçalho a citar ADR-0011 D7 e o defeito C1.
+
+Não escrevas em backend/src/main/java, pom.xml, application*.yml nem db/seed.
+Critério de aceitação: a migração aplica em base limpa e sobre uma base já
+migrada; explica como verificaste.

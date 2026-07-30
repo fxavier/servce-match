@@ -1,0 +1,38 @@
+Usa o agente web-site. Lê primeiro CLAUDE.md, docs/ARQUITETURA.md §4.1 e §19.1, e
+a skill openapi-contract-first.
+
+Contexto: docs/ESTADO-DO-SISTEMA.md, defeito C1. Não existe área de administração
+no web/site. Sem forma de aprovar um prestador, approval_status fica PENDING para
+sempre e GET /v1/search/providers devolve vazio para qualquer consulta em
+produção. É o produto desligado.
+
+O contrato JÁ tem o endpoint (openapi.yaml:800, operationId decideProviderApproval)
+e o schema.d.ts já está sincronizado (26/26 paths). Trabalha contra o contrato: o
+backend está a ser implementado em paralelo pelo backend-domain-providers, e não
+esperas por ele.
+
+Tarefa — área /admin, protegida por role ADMIN:
+- Lista de prestadores pendentes de aprovação, com detalhe suficiente para decidir.
+- Ação de decisão: APPROVED, REJECTED, SUSPENDED. Motivo obrigatório para
+  REJECTED e SUSPENDED (o servidor devolve 422 se faltar) e opcional para
+  APPROVED — reflete isso na validação do formulário, sem duplicar a regra de
+  negócio: o servidor continua a ser a autoridade.
+- Transições válidas: PENDING → APPROVED|REJECTED, APPROVED → SUSPENDED. A UI não
+  oferece transições inválidas, mas trata 409 do servidor sem partir — o cliente
+  nunca é autoridade sobre o estado.
+- Envia Idempotency-Key na decisão (o contrato aceita-o) para que um duplo clique
+  não produza duas decisões.
+- Erros: usa o tratamento de Problem Details que já existe no site. 403 para não-ADMIN.
+- Estados de loading/erro/vazio, como no resto do site. Reutiliza os componentes
+  de components/ui — não crias um design paralelo para o admin.
+
+Restrições:
+- ProtectedRoute não é autoritativo (declara-o no próprio ficheiro): a proteção
+  real é do servidor. A rota /admin esconde a UI, não protege o dado.
+- Nada de dados fabricados no caminho real. Se um campo não vier do contrato, não
+  o inventes — este é o defeito M16 que a onda-1 acabou de fechar; não o reabras.
+
+Acrescenta um teste E2E Playwright em web/e2e do fluxo admin (o mock-backend em
+web/e2e/mock-backend precisa do endpoint novo — acrescenta-o lá, é teu).
+Critério de aceitação: lint, typecheck e testes verdes; o fluxo aprovar/rejeitar
+funciona contra o mock-backend.

@@ -1,0 +1,35 @@
+Usa o agente qa-e2e. Lê primeiro CLAUDE.md §5, docs/adr/0011-*.md (D9) e a skill
+estado-com-escritor. Lê também a skill testcontainers-integration-test.
+
+Contexto: docs/ESTADO-DO-SISTEMA.md, defeitos C1 e C3. O endpoint de aprovação
+acabou de ser implementado pelo backend-domain-providers.
+
+Tarefa 1 — teste de transição ponta-a-ponta (é o que fecha o C1 de verdade):
+Prestador criado pelo caminho de produção → confirma que NÃO aparece em
+GET /v1/search/providers nem no inbox de matching → PATCH aprovação por ADMIN →
+confirma que PASSA a aparecer. Assevera os DOIS lados: se só asseverares o lado
+positivo, um regresso do defeito volta a passar despercebido. Nada de SQL direto
+para pôr o prestador em APPROVED — o objetivo do teste é exatamente exercitar a
+escrita.
+
+Tarefa 2 — limpar a dívida de fixtures (ADR-0011 D9):
+Seis ficheiros de teste fabricam approval_status='APPROVED' por INSERT/UPDATE
+direto. Agora que existe transição de produção, esses INSERT passam a ser
+toleráveis como atalho de setup — mas cada um tem de ter um comentário que nomeie
+o teste da Tarefa 1. Faz esse varrimento.
+
+Tarefa 3 — corrigir uma mentira documentada:
+backend/src/test/java/pt/servimatch/gating/SubscriptionGatingAcrossModulesIntegrationTest.java,
+javadoc nas linhas ~41-50, afirma que "o listener billing → providers que escreve
+provider_profile.visibility_state ... já tem cobertura própria ... ver
+SubscriptionLifecycleStateMachineTest". Esse listener NUNCA existiu e esse teste
+não o cobre. A onda-1 removeu visibility_state de todos os predicados de
+produção, pelo que o javadoc está agora duplamente errado. Corrige o texto para
+descrever o que o teste realmente faz. Se os UPDATE a visibility_state nas linhas
+~312 e ~335 já não tiverem efeito sobre nenhum predicado, remove-os.
+
+Regra geral: nenhum INSERT direto de teste sem teste da transição correspondente,
+ou sem comentário que nomeie esse teste — e o teste nomeado tem de existir.
+Verifica que existe, não confies no comentário.
+
+Não escrevas fora de backend/src/test/** e web/e2e/**.

@@ -1,0 +1,36 @@
+Usa o agente backend-platform. Lê primeiro CLAUDE.md (§3 e §4), docs/adr/0001,
+0010 e 0011, e a skill spring-modulith-module.
+
+Contexto: docs/ESTADO-DO-SISTEMA.md, defeito C1. A tabela audit_log existe desde
+V13 e não tem um único escritor em todo o projeto — CLAUDE.md §4 e ARQUITETURA
+§8.6 exigem auditoria de ações sensíveis. A primeira ação auditada será a decisão
+administrativa de aprovação de prestador, implementada por
+backend-domain-providers na onda seguinte.
+
+Tarefa 1 — cria platform/audit:
+- Uma API mínima que os módulos possam chamar para registar uma ação:
+  actor_id, action, target_type, target_id, metadata (JSONB), correlation_id.
+- correlation_id vem de CorrelationIdSupport.currentOrNull(), NUNCA de parâmetro
+  do chamador.
+- Participa na transação do chamador (nada de REQUIRES_NEW): auditoria fora da
+  transação é auditoria que se perde exatamente quando é precisa. Documenta esta
+  escolha em javadoc.
+- PII proibida no metadata (CLAUDE.md §4): o alvo identifica-se por UUID. Se
+  conseguires impor isto por tipo em vez de por convenção, fá-lo; se não,
+  documenta a regra no javadoc da API.
+- Escrita por JdbcClient, coerente com o resto do backend (não há JPA no projeto).
+
+Tarefa 2 — fronteiras de módulo:
+- Decide e declara como modules/providers pode chamar platform/audit sem violar
+  ApplicationModules.verify(). Verifica primeiro como platform/idempotency e
+  platform/error são consumidos pelos módulos hoje e segue o mesmo padrão — não
+  inventes um novo.
+- Se for preciso alterar providers/package-info.java (allowedDependencies ou
+  @NamedInterface), fá-lo tu: esses ficheiros são teus mesmo dentro de módulos de
+  outros agentes. Documenta a dependência nova com motivo, no estilo do
+  package-info atual.
+
+Não escrevas em modules/**/ (exceto package-info.java), db/migration/**, web/**
+nem mobile/**.
+Critério de aceitação: ApplicationModules.verify() passa; teste unitário do
+escritor de auditoria a cobrir caminho principal e um caso de erro.

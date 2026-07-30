@@ -1,0 +1,33 @@
+Usa o agente web-bff. Lê primeiro CLAUDE.md §4 e docs/adr/0012-*.md — em especial
+a decisão D7.3, e lê-a por inteiro antes de escrever código.
+
+Contexto: docs/ESTADO-DO-SISTEMA.md, defeito C3.1. Regressão introduzida pela
+fusão da onda-1.
+
+web/bff/src/routes/auth.ts:199 devolve 409 'email-already-registered' quando o
+email já existe, contra 201 para email novo. É um oráculo de enumeração de
+utilizadores. O comentário nas linhas ~190-198 invoca "divergência deliberada da
+anti-enumeração estrita (ADR-0012 D7.3)" como autorização — mas D7.3
+(docs/adr/0012-*.md:236) diz exatamente o contrário: "no registo, mesma resposta
+para email novo e para email já registado — caso contrário o oráculo apenas mudou
+de porta". CLAUDE.md §4 diz o mesmo. O comentário está errado e o teste
+web/bff/test/auth.register.test.ts:117-131 fixa a violação em verde.
+
+Tarefa:
+- Registo com email já existente passa a devolver a MESMA resposta que um registo
+  novo: mesmo status, mesmo corpo, mesmo tempo. O aviso ao titular vai por email,
+  nunca na resposta HTTP.
+- O caminho de conflito TEM de passar por withNormalizedTiming (web/bff/src/loginTiming.ts),
+  como o login já faz. Hoje não passa, pelo que o 409 é também um caminho rápido —
+  corrigir só o status code deixaria o oráculo aberto por temporização.
+- Corrige o comentário que cita mal o ADR. Não deixes uma citação de ADR que
+  afirme o contrário do que o ADR diz.
+- Reescreve auth.register.test.ts: em vez de assegurar o 409, assevera a
+  indistinguibilidade — status igual, corpo igual, e tempo dentro da mesma janela
+  quantizada, entre email novo e email já registado.
+- Se o envio de email ao titular ainda não existir, NÃO o inventes: implementa a
+  resposta indistinguível, deixa o ponto de extensão explícito e reporta a lacuna
+  no fim. Não bloqueies nisso.
+
+Não escrevas fora de web/bff/**. Confirma que continua a valer o invariante:
+nenhuma resposta do BFF ao browser contém access_token ou refresh_token.
