@@ -32,6 +32,8 @@ npm-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+.serena
+
 # Flutter / Dart
 .dart_tool/
 .packages
