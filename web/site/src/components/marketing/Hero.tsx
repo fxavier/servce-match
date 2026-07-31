@@ -57,7 +57,7 @@ export function Hero() {
           <Reveal delay={0.15}>
             <form
               onSubmit={handleSubmit}
-              className="surface-card mt-8 flex flex-col gap-3 p-3 sm:flex-row sm:items-center"
+              className="surface-card mt-8 flex flex-col gap-3 p-3 md:flex-row md:items-center"
               aria-label="Arranque rápido de pedido"
             >
               <label className="sr-only" htmlFor="hero-category">
@@ -67,7 +67,7 @@ export function Hero() {
                 id="hero-category"
                 value={categoryId}
                 onChange={(event) => setCategoryId(event.target.value)}
-                className="sm:max-w-[220px]"
+                className="md:w-72 md:shrink-0"
               >
                 <option value="">Que serviço precisa?</option>
                 {topLevelCategories.map((category) => (
@@ -79,19 +79,19 @@ export function Hero() {
               <label className="sr-only" htmlFor="hero-location">
                 Concelho ou código postal
               </label>
-              <div className="relative flex-1">
+              <div className="relative min-w-0 flex-1 md:min-w-[110px]">
                 <MapPin aria-hidden="true" className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted" strokeWidth={1.5} />
                 <Input
                   id="hero-location"
                   value={location}
                   onChange={(event) => setLocation(event.target.value)}
                   placeholder="Concelho ou código postal"
-                  className="pl-10"
+                  className="w-full pl-10"
                 />
               </div>
               <button
                 type="submit"
-                className="inline-flex h-11 items-center justify-center gap-1.5 rounded-full bg-gradient-to-r from-orange-600 to-orange-400 px-5 text-sm font-medium text-accent-fg shadow-[0_0_40px_-12px_var(--color-orange-500)] hover:brightness-110"
+                className="inline-flex h-11 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-gradient-to-r from-orange-600 to-orange-400 px-5 text-sm font-medium text-accent-fg shadow-[0_0_40px_-12px_var(--color-orange-500)] hover:brightness-110"
               >
                 Pedir orçamentos grátis
                 <ArrowRight aria-hidden="true" className="size-4" strokeWidth={1.5} />
