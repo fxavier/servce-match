@@ -50,13 +50,11 @@ e autentica de imediato (ADR-0012 D2).
 
 | Status | Corpo | Quando |
 |---|---|---|
-| `201` | `{ "registered": true, "session": true, "user": { "sub", "email", "username", "roles" } }` + `Set-Cookie: sm_sid` | Conta criada, role atribuída, login automático conseguido. |
-| `201` | `{ "registered": true, "session": false }` (sem cookie de sessão) | Conta criada e role atribuída, mas o login automático a seguir falhou (não deveria acontecer — ver ADR-0012 D5/infra/README.md). O site deve levar o utilizador ao ecrã de login manual, **não** tratar como erro de registo. |
+| `201` | `{ "registered": true }` — sempre este corpo, LITERALMENTE, com ou sem `Set-Cookie: sm_sid` conforme o login automático tenha ou não confirmado sessão. | Conta criada com sucesso **ou** email já em uso por outra conta. Estes dois casos são **indistinguíveis** por desenho (status, corpo e tempo de resposta — ADR-0012 D7.3): um `409` aqui seria o mesmo oráculo de enumeração que o login já fecha, só que no registo. O site nunca lê `session`/`user` deste corpo — chama sempre `GET /auth/me` a seguir para confirmar a sessão real (única fonte de verdade). Se o email já existia, o titular é avisado por email (fora da resposta HTTP; ponto de extensão ainda não implementado — ver comentário em `src/routes/auth.ts`), nunca o requerente. |
 | `400` | `type: .../invalid-registration`, `invalidFields: string[]` | Email inválido, nome vazio, ou `role` fora da allowlist. |
 | `400` | `type: .../weak-password`, `errors: [{code, message}]` | Password não cumpre a política (validada localmente antes de chamar o Keycloak; se o Keycloak ainda assim recusar por alguma regra residual, a resposta é a mesma, com uma mensagem genérica fechada — nunca o texto bruto do IdP). |
-| `409` | `type: .../email-already-registered` | Já existe conta com este email. **Divergência deliberada da anti-enumeração estrita do login** (ver secção abaixo) — o utilizador de registo precisa de saber. |
 | `429` | `type: .../too-many-requests`, cabeçalho `Retry-After` | Rate limit por IP ou por email excedido. |
-| `502` | `type: .../upstream-unavailable` | Falha a criar o utilizador ou a atribuir a role no Keycloak. Se a role falhar depois de o utilizador existir, o BFF tenta apagá-lo (rollback) antes de responder — uma conta sem role é pior que inexistente. |
+| `502` | `type: .../upstream-unavailable` | Falha a criar o utilizador ou a atribuir a role no Keycloak (email novo), ou falha de infraestrutura equivalente durante o caminho de conflito. Se a role falhar depois de o utilizador existir, o BFF tenta apagá-lo (rollback) antes de responder — uma conta sem role é pior que inexistente. |
 
 ## `POST /auth/login`
 

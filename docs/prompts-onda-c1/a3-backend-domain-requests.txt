@@ -1,0 +1,33 @@
+Usa o agente backend-domain-requests. Lê primeiro CLAUDE.md.
+
+Contexto: docs/ESTADO-DO-SISTEMA.md, defeito C4 — IDOR confirmado em 62437e1.
+
+Em backend/src/main/java/pt/servimatch/modules/requests/internal/RequestsService.java
+existe parseStatusFilter (linha ~174) e é aplicado em listMine (linha ~161). Mas
+listInbox (linha ~259) continua a passar o statusFilter cru:
+
+    List<String> statuses = statusFilter != null
+            ? List.of(statusFilter)
+            : List.of(PUBLISHED.name(), IN_NEGOTIATION.name());
+
+Consequência: GET /v1/providers/me/requests?status=DRAFT devolve pedidos ainda
+não publicados de qualquer cliente, incluindo morada completa e código postal. O
+caminho de detalhe exclui DRAFT explicitamente (linha ~156), o que prova que isto
+é defeito e não decisão.
+
+Tarefa:
+- Aplica validação também em listInbox. Nota que a allowlist do inbox NÃO é a
+  mesma de listMine: o cliente pode legitimamente listar os seus DRAFT; o
+  prestador não. Para o inbox a allowlist é {PUBLISHED, IN_NEGOTIATION}. Decide
+  se reutilizas parseStatusFilter com um parâmetro de allowlist ou se crias um
+  segundo método — escolhe e justifica.
+- Valor fora da allowlist → 400 Problem Details (RFC 9457), type sob
+  https://errors.servimatch.pt/. Não devolvas 403: o estado pedido é inválido
+  para este endpoint, não é uma questão de permissão.
+- Testes: ?status=DRAFT rejeitado com 400; ?status=lixo rejeitado com 400;
+  ?status=PUBLISHED aceite; sem parâmetro mantém o comportamento atual. Verifica
+  que nenhum teste existente dependia do comportamento antigo.
+- Verifica se o mesmo padrão (RequestParam de estado a chegar cru a uma query)
+  existe noutro sítio do teu âmbito. Se existir, corrige e diz onde.
+
+Não escrevas fora de modules/requests/** e dos seus testes.

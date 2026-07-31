@@ -133,7 +133,151 @@ export function createAuthRouter({
     }
   }
 
-  // --- POST /auth/register (ADR-0012 D2) --------------------------------
+  // --- POST /auth/register (ADR-0012 D2, D7.3) ---------------------------
+
+  /**
+   * Resultado interno do núcleo de registo — normalizado em tempo por
+   * `withNormalizedTiming` ANTES de se traduzir em resposta HTTP. Só há dois
+   * resultados possíveis, e a resposta HTTP construída a partir de qualquer
+   * um deles é LITERALMENTE idêntica (201, corpo `{ registered: true }`):
+   * é o que fecha o oráculo de enumeração de C3.1
+   * (docs/ESTADO-DO-SISTEMA.md) — status, corpo e tempo iguais. `kind`
+   * decide apenas se o cookie de sessão é definido, nunca o que vai no
+   * corpo — ver o comentário junto à construção da resposta, mais abaixo.
+   */
+  type RegisterCoreResult = { kind: 'session'; session: SessionRecord } | { kind: 'no-session' };
+
+  /**
+   * Marca uma falha de infraestrutura (criação ou atribuição de role) já
+   * tratada dentro de `registerCore` (log e/ou rollback aplicado). Existe só
+   * para que o exterior do bloco temporizado saiba traduzir para 502 — nunca
+   * atravessa para o corpo da resposta.
+   */
+  class RegistrationInfraFailure extends Error {
+    constructor() {
+      super('registration-infra-failure');
+    }
+  }
+
+  /**
+   * Ponto de extensão: aviso ao TITULAR da conta já existente (nunca ao
+   * requerente) de que houve uma tentativa de registo com o email dele —
+   * ADR-0012 D7.3 ("o aviso ao titular vai por email, nunca na resposta
+   * HTTP"). NÃO implementado: este BFF não tem hoje nenhuma infraestrutura
+   * de envio de email (sem SMTP/provider configurado neste módulo). Isto é
+   * deliberadamente um ponto de extensão, não um placeholder esquecido — ver
+   * o relatório desta tarefa. Quando existir, chamar sem esperar pelo
+   * resultado (fire-and-forget), para não introduzir mais um sinal de
+   * tempo, e nunca passar a password recebida nem registá-la em log.
+   */
+  function notifyExistingAccountHolderOfRegistrationAttempt(correlationId: string): void {
+    // eslint-disable-next-line no-console
+    console.info(
+      '[bff] auth.register: tentativa de registo para email já existente — aviso ao titular por implementar',
+      { correlationId },
+    );
+  }
+
+  /**
+   * Núcleo do registo — chamado sempre dentro de `withNormalizedTiming`.
+   * Email novo e email já registado passam pela MESMA função e produzem o
+   * MESMO formato de resultado; a diferença de trabalho interno (criar
+   * utilizador + atribuir role vs. só tentar autenticar) é exatamente o que
+   * a normalização de tempo em `registerCore`'s chamador esconde.
+   */
+  async function registerCore(input: {
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+    role: 'CUSTOMER' | 'PROVIDER';
+    correlationId: string;
+    req: Request;
+  }): Promise<RegisterCoreResult> {
+    const { email, password, firstName, lastName, role, correlationId, req } = input;
+    const result = await adminClient.createUser({ email, password, firstName, lastName });
+
+    if (result.outcome === 'conflict') {
+      // O email já tem conta. Nunca se devolve isso ao chamador (409 seria
+      // o oráculo que esta tarefa fecha) — o aviso vai para o titular, por
+      // email, nunca na resposta HTTP.
+      notifyExistingAccountHolderOfRegistrationAttempt(correlationId);
+
+      // Tentar autenticar com a password submetida também consome a quota
+      // do LOGIN (não só a do registo): sem isto, `/auth/register` seria um
+      // segundo canal de força bruta com orçamento PRÓPRIO, a dobrar o
+      // total de tentativas disponíveis contra a mesma vítima (o registo
+      // tem o seu próprio limitador, por design, para o caso de email
+      // novo). Se a quota de login já estiver esgotada para este par
+      // (ip,email), trata-se exatamente como password errada — nunca se
+      // revela ao chamador que foi a quota, isso seria, por si só, um
+      // oráculo, já que o caminho de email novo nunca faz esta verificação.
+      const loginRate = loginLimiter.check(clientIp(req), email);
+      if (!loginRate.allowed) {
+        return { kind: 'no-session' };
+      }
+
+      try {
+        const tokens = await directGrant(email, password);
+        const session = sessions.create({
+          accessToken: tokens.access_token,
+          refreshToken: tokens.refresh_token,
+          idToken: tokens.id_token,
+          expiresInSeconds: tokens.expiresIn() ?? 300,
+        });
+        return { kind: 'session', session };
+      } catch {
+        return { kind: 'no-session' };
+      }
+    }
+
+    const created = { id: result.id };
+
+    try {
+      await adminClient.assignRealmRole(created.id, role);
+    } catch (error) {
+      // ROLLBACK: uma conta sem role é pior que inexistente (ADR-0012 D2).
+      const deleted = await adminClient.deleteUser(created.id).catch(() => false);
+      if (!deleted) {
+        // O apagar também falhou — regista o órfão de forma correlacionável,
+        // NUNCA com PII (nem email, nem nome): só o id opaco do Keycloak e o
+        // correlation_id.
+        // eslint-disable-next-line no-console
+        console.error('[bff] auth.register: utilizador órfão sem role e sem rollback', {
+          correlationId,
+          keycloakUserId: created.id,
+        });
+      } else {
+        // eslint-disable-next-line no-console
+        console.warn('[bff] auth.register: atribuição de role falhou, rollback aplicado', {
+          correlationId,
+          keycloakUserId: created.id,
+          error: error instanceof KeycloakAdminError ? error.status : undefined,
+        });
+      }
+      throw new RegistrationInfraFailure();
+    }
+
+    // Login imediato a seguir ao registo (ADR-0012 D2). Se falhar (não
+    // deveria, dado `emailVerified:false` + `verifyEmail:false` no realm —
+    // ver infra/README.md), o registo já está concluído: devolve-se sucesso
+    // sem sessão para a SPA levar o utilizador ao ecrã de login manual, em
+    // vez de mascarar como falha de registo.
+    try {
+      const tokens = await directGrant(email, password);
+      const session = sessions.create({
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        idToken: tokens.id_token,
+        expiresInSeconds: tokens.expiresIn() ?? 300,
+      });
+      return { kind: 'session', session };
+    } catch {
+      // eslint-disable-next-line no-console
+      console.warn('[bff] auth.register: login automático pós-registo falhou', { correlationId });
+      return { kind: 'no-session' };
+    }
+  }
 
   router.post('/register', async (req, res) => {
     const correlationId = randomUUID();
@@ -183,24 +327,44 @@ export function createAuthRouter({
 
     const { firstName, lastName } = splitName(name);
 
-    let created: { id: string };
     try {
-      const result = await adminClient.createUser({ email, password, firstName, lastName });
-      if (result.outcome === 'conflict') {
-        // Divergência deliberada da anti-enumeração estrita (ADR-0012 D7.3):
-        // no REGISTO, ao contrário do LOGIN, o utilizador precisa de saber
-        // que o email já está em uso para poder agir (recuperar acesso,
-        // usar outro email) — sem isso o formulário fica sem explicação
-        // possível para um erro que o utilizador não causou. O oráculo que
-        // isto abre (confirmar que um email tem conta) é aceite aqui e só
-        // aqui; o LOGIN continua estritamente indistinguível (ver `/login`
-        // abaixo) porque aí o mesmo oráculo permite credential stuffing
-        // dirigido, o que o registo não permite por si só.
-        sendProblem(res, 409, 'email-already-registered', 'Já existe uma conta com este email.');
+      const outcome = await withNormalizedTiming(
+        () => registerCore({ email, password, firstName, lastName, role, correlationId, req }),
+        config.registerTiming,
+        {
+          onEscapeValve: ({ elapsedMs }) => {
+            // eslint-disable-next-line no-console
+            console.warn('[bff] auth.register: válvula de escape do prazo fixo acionada (IdP lento?)', {
+              correlationId,
+              elapsedMs,
+            });
+          },
+        },
+        correlationId,
+      );
+
+      // Corpo LITERALMENTE idêntico nos dois casos — nem sequer `session`
+      // booleano: se ele variasse com `outcome.kind`, o oráculo só teria
+      // mudado de status code para campo do corpo (o email novo autentica
+      // quase sempre com a password que acabou de definir; o email já
+      // registado quase nunca autentica com a password que o requerente
+      // arriscou, que não é a do titular). O cookie de sessão É definido só
+      // quando `outcome.kind === 'session'`, mas isso não é um oráculo novo:
+      // `Set-Cookie` não é legível por JavaScript (forbidden response
+      // header), e confirmar a sessão exige um pedido SEPARADO a `GET
+      // /auth/me` — nesse ponto, saber se a password arriscada autenticou
+      // não dá ao atacante mais do que chamar `/auth/login` diretamente com
+      // o mesmo par (email, password) já dava, sujeito ao mesmo
+      // `loginLimiter` (ver `registerCore`, ramo `conflict`).
+      if (outcome.kind === 'session') {
+        setSessionCookie(res, config, outcome.session.id);
+      }
+      res.status(201).json({ registered: true });
+    } catch (error) {
+      if (error instanceof RegistrationInfraFailure) {
+        sendProblem(res, 502, 'upstream-unavailable', 'Não foi possível concluir o registo. Tenta novamente.');
         return;
       }
-      created = { id: result.id };
-    } catch (error) {
       if (error instanceof KeycloakAdminError && error.status === 400) {
         const problem = genericPasswordPolicyProblem();
         sendProblem(res, 400, 'weak-password', 'A password não cumpre a política de segurança.', problem.message, {
@@ -214,54 +378,6 @@ export function createAuthRouter({
         status: error instanceof KeycloakAdminError ? error.status : undefined,
       });
       sendProblem(res, 502, 'upstream-unavailable', 'Não foi possível concluir o registo. Tenta novamente.');
-      return;
-    }
-
-    try {
-      await adminClient.assignRealmRole(created.id, role);
-    } catch (error) {
-      // ROLLBACK: uma conta sem role é pior que inexistente (ADR-0012 D2).
-      const deleted = await adminClient.deleteUser(created.id).catch(() => false);
-      if (!deleted) {
-        // O apagar também falhou — regista o órfão de forma correlacionável,
-        // NUNCA com PII (nem email, nem nome): só o id opaco do Keycloak e o
-        // correlation_id.
-        // eslint-disable-next-line no-console
-        console.error('[bff] auth.register: utilizador órfão sem role e sem rollback', {
-          correlationId,
-          keycloakUserId: created.id,
-        });
-      } else {
-        // eslint-disable-next-line no-console
-        console.warn('[bff] auth.register: atribuição de role falhou, rollback aplicado', {
-          correlationId,
-          keycloakUserId: created.id,
-          error: error instanceof KeycloakAdminError ? error.status : undefined,
-        });
-      }
-      sendProblem(res, 502, 'upstream-unavailable', 'Não foi possível concluir o registo. Tenta novamente.');
-      return;
-    }
-
-    // Login imediato a seguir ao registo (ADR-0012 D2). Se falhar (não
-    // deveria, dado `emailVerified:false` + `verifyEmail:false` no realm —
-    // ver infra/README.md), o registo já está concluído: devolve sucesso
-    // sem sessão para a SPA levar o utilizador ao ecrã de login manual, em
-    // vez de mascarar como falha de registo.
-    try {
-      const tokens = await directGrant(email, password);
-      const session = sessions.create({
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
-        idToken: tokens.id_token,
-        expiresInSeconds: tokens.expiresIn() ?? 300,
-      });
-      setSessionCookie(res, config, session.id);
-      res.status(201).json({ registered: true, session: true, user: publicUser(session) });
-    } catch {
-      // eslint-disable-next-line no-console
-      console.warn('[bff] auth.register: login automático pós-registo falhou', { correlationId });
-      res.status(201).json({ registered: true, session: false });
     }
   });
 

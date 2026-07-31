@@ -39,6 +39,11 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
       quantumMs: 20,
       maxDelayMs: 500,
     },
+    registerTiming: {
+      floorMs: 200,
+      quantumMs: 50,
+      maxDelayMs: 2_000,
+    },
     session: {
       absoluteTtlSeconds: 60 * 60 * 12,
       sweepIntervalSeconds: 300,

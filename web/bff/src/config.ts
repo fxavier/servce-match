@@ -62,6 +62,22 @@ export interface Config {
     /** Válvula de escape: acima disto, responde sem esperar mais e regista telemetria. */
     maxDelayMs: number;
   };
+  /**
+   * Normalização de tempo de resposta do REGISTO (ADR-0012 D7.3/D7.4), pelo
+   * mesmo mecanismo do login (`withNormalizedTiming`), mas com piso próprio:
+   * o caminho de email novo pode fazer até 4 chamadas à Admin REST API
+   * (criar utilizador, listar roles disponíveis, atribuir role, login) —
+   * naturalmente mais lento do que o caminho de email já existente (que,
+   * hoje, faz quando muito uma tentativa de login). Sem um piso dimensionado
+   * para o caminho mais pesado, a diferença de número de chamadas seria, ela
+   * própria, um oráculo de tempo entre "email novo" e "email já registado".
+   */
+  registerTiming: {
+    floorMs: number;
+    quantumMs: number;
+    /** Válvula de escape: acima disto, responde sem esperar mais e regista telemetria. */
+    maxDelayMs: number;
+  };
   session: {
     /**
      * TTL absoluto, fixado na criação e imune a renovação — uma sessão
@@ -164,6 +180,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       floorMs: optionalInt(env, 'LOGIN_TIMING_FLOOR_MS', 400),
       quantumMs: optionalInt(env, 'LOGIN_TIMING_QUANTUM_MS', 100),
       maxDelayMs: optionalInt(env, 'LOGIN_TIMING_MAX_DELAY_MS', 3_000),
+    },
+    registerTiming: {
+      floorMs: optionalInt(env, 'REGISTER_TIMING_FLOOR_MS', 800),
+      quantumMs: optionalInt(env, 'REGISTER_TIMING_QUANTUM_MS', 200),
+      maxDelayMs: optionalInt(env, 'REGISTER_TIMING_MAX_DELAY_MS', 6_000),
     },
     session: {
       absoluteTtlSeconds: optionalInt(env, 'SESSION_ABSOLUTE_TTL_SECONDS', 60 * 60 * 12),

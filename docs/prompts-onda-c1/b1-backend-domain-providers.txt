@@ -1,0 +1,50 @@
+Usa o agente backend-domain-providers. Lê primeiro CLAUDE.md, docs/adr/0011-*.md
+(sobretudo D7 e D9), e as skills admin-moderation-endpoint e estado-com-escritor.
+Lê ambas as skills antes de escrever código — a segunda define o critério pelo
+qual este trabalho será aceite.
+
+Contexto: docs/ESTADO-DO-SISTEMA.md, defeito C1 — o mais grave do sistema.
+provider_profile.approval_status é lido por EligibilityRepository:79,
+ProviderSearchRepository e ProvidersService, tem DEFAULT 'PENDING', e NÃO TEM UM
+ÚNICO ESCRITOR em src/main/java. Nenhum prestador é jamais aprovado; a pesquisa
+devolve 0 resultados para qualquer consulta em produção. Os testes fabricam
+'APPROVED' por SQL direto em seis ficheiros, e o seed dev-only também — por isso
+funciona em desenvolvimento e falha em silêncio em produção.
+
+Já feito por outros agentes nesta onda (confirma antes de assumir):
+- V17 acrescentou approval_reason, approval_decided_by, approval_decided_at.
+- platform/audit expõe um escritor de audit_log; providers/package-info.java já
+  declara a dependência necessária.
+
+Tarefa: implementa PATCH /v1/admin/providers/{providerId}/approval conforme
+openapi.yaml:800. Segue a skill admin-moderation-endpoint na íntegra. Pontos
+não negociáveis:
+- @PreAuthorize("hasRole('ADMIN')") em método público. Role verificada antes de
+  carregar o alvo, para não criar oráculo 403/404.
+- Dois tipos Java distintos, espelhando o contrato: ProviderApprovalStatus (4
+  valores) e ProviderApprovalDecision (3 — PENDING nunca é destino).
+- Transições como allowlist declarativa: PENDING→APPROVED, PENDING→REJECTED,
+  APPROVED→SUSPENDED. Qualquer outra → 409 com o estado atual no corpo.
+- reason obrigatório para REJECTED e SUSPENDED → 422 se faltar. Opcional para
+  APPROVED. O reason é PII potencial: guarda-o na coluna, NUNCA em log.
+- UPDATE ... WHERE id = :id AND approval_status = :esperado. Zero linhas → relê e
+  devolve 409.
+- Escrita em audit_log na MESMA transação, action "provider.approval.decided",
+  metadata com {from, to} — sem email, nome ou telefone.
+- Idempotency-Key via platform/idempotency. Não escrevas mecanismo novo.
+- decidedBy é o UUID do administrador resolvido a partir do sub do JWT.
+
+Verificação obrigatória antes de fechares (skill estado-com-escritor):
+1. grep -rn "SET approval_status" backend/src/main/java tem agora de devolver a
+   TUA linha. Antes devolvia vazio.
+2. Escreve o teste de transição no teu âmbito (modules/providers): prestador
+   criado pelo caminho de produção fica PENDING; PATCH por ADMIN muda para
+   APPROVED; PATCH inválido devolve 409; sem role ADMIN devolve 403. O teste
+   ponta-a-ponta que liga isto à pesquisa é do qa-e2e — não o escrevas tu, mas
+   deixa claro no relatório final o que ele tem de cobrir.
+3. Confirma que ProvidersApi/checkEligibility passa a poder mudar de resultado em
+   produção. Se descobrires que ainda há outra metade da conjunção sem escritor,
+   PARA e reporta — não a contornes.
+
+Não escrevas em db/migration/**, platform/**, package-info.java, config/**,
+pom.xml, web/** nem noutros módulos. Precisas de algo aí? Pede e reporta.
