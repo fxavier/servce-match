@@ -55,7 +55,7 @@ describe('proxy /api/** — renovação silenciosa do access_token (ADR-0012, pr
     expect(updated?.refreshToken).toBe('refresh-rotated');
   });
 
-  it('sessão sem refresh_token e access_token expirado: 401, não tenta renovar', async () => {
+  it('sessão sem refresh_token e access_token expirado: 401, não tenta renovar (endpoint protegido)', async () => {
     const oidc = await createTestOidcSetup();
     const config = testConfig({ legacyOidcFlow: { enabled: false } });
     const sessions = new SessionStore(config.session.absoluteTtlSeconds);
@@ -64,7 +64,10 @@ describe('proxy /api/** — renovação silenciosa do access_token (ADR-0012, pr
     const accessToken = oidc.fakeAccessToken('user-no-refresh', ['CUSTOMER']);
     const session = sessions.create({ accessToken, expiresInSeconds: 1 });
 
-    const res = await request(app).get('/api/v1/categories').set('Cookie', [`sm_sid=${session.id}`]);
+    // /v1/requests exige sessão sempre — ao contrário de /v1/categories
+    // (público), onde este mesmo cenário deve seguir como anónimo em vez de
+    // 401 (ver test/publicEndpoints.test.ts).
+    const res = await request(app).get('/api/v1/requests').set('Cookie', [`sm_sid=${session.id}`]);
     expect(res.status).toBe(401);
   });
 });
