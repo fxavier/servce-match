@@ -56,9 +56,17 @@
   --font-sans: 'Instrument Sans', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
 
-  /* Escala fluida (§5.2) */
-  --text-hero: clamp(2.75rem, 7vw, 5.5rem);
-  --text-hero--line-height: 0.95;
+  /* Escala fluida de tipografia display. Ajustada por medição real (Playwright,
+     ver web/site — Hero.tsx) para o título de 68 caracteres do Hero: os
+     valores antigos (2.75rem / 7vw / 5.5rem) produziam 6-7 linhas em quase
+     todas as larguras testadas (320-1536px), muito acima do razoável para um
+     título de display. Os novos limites mantêm --text-hero sempre acima de
+     --text-h1 (clamp(2rem, 4.5vw, 3.25rem)) com margem de segurança, o que é
+     o fator dominante: nas larguras 320, 390, 1024, 1280 e 1536 essa margem
+     — não o comprimento do texto — é o que impede 2-3 linhas perfeitas; ver
+     tabela de medições no PR/relatório do agente `web-site`. */
+  --text-hero: clamp(2.125rem, 5vw, 3.625rem);
+  --text-hero--line-height: 1.1;
   --text-hero--letter-spacing: -0.03em;
 
   --text-h1: clamp(2rem, 4.5vw, 3.25rem);
