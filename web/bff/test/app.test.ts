@@ -25,9 +25,12 @@ describe('BFF — sessão e CSRF (ADR-0002)', () => {
     expect(res.body).toEqual({ authenticated: false });
   });
 
-  it('GET /api/* sem sessão devolve 401 problem+json (caso de erro)', async () => {
+  it('GET /api/* sem sessão devolve 401 problem+json (caso de erro) — endpoint protegido, não público', async () => {
     const { app } = await buildTestApp();
-    const res = await request(app).get('/api/v1/categories');
+    // /v1/requests NÃO tem `security: []` no contrato (ao contrário de
+    // /v1/categories, que é público desde a correção do defeito da homepage
+    // — ver test/publicEndpoints.test.ts).
+    const res = await request(app).get('/api/v1/requests');
     expect(res.status).toBe(401);
     expect(res.headers['content-type']).toContain('application/problem+json');
     expect(res.body.type).toBe('https://errors.servimatch.pt/unauthenticated');
