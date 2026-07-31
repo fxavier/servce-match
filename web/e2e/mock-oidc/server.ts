@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { ServerResponse } from 'node:http';
 import express from 'express';
 import { Events, OAuth2Server, type TokenRequestIncomingMessage } from 'oauth2-mock-server';
+import { SEED_ADMIN_EMAIL } from '../fixtures.js';
 
 /**
  * Keycloak falso para o E2E (ADR-0012). Substitui o antigo Authorization
@@ -41,6 +42,26 @@ interface DirectoryUser {
 
 const directory = new Map<string, DirectoryUser>(); // id -> user
 const byEmail = new Map<string, string>(); // email -> id
+
+/**
+ * Conta `ADMIN` semeada diretamente no diretório em memória, fora do fluxo
+ * `POST /auth/register` (que só aceita `role` `CUSTOMER`/`PROVIDER` —
+ * `web/bff/src/keycloakAdmin.ts::isAllowedRealmRole` — administradores não
+ * se auto-registam, CLAUDE.md §4). Equivalente, para este mock, a um
+ * administrador criado fora de banda no realm real; existe só para que
+ * `web/e2e/tests/admin-approval.spec.ts` consiga autenticar-se por
+ * `POST /auth/login` (o mock não valida password, ver o comentário do
+ * módulo).
+ */
+const SEED_ADMIN_USER_ID = 'e2e-admin-seed-1';
+directory.set(SEED_ADMIN_USER_ID, {
+  id: SEED_ADMIN_USER_ID,
+  email: SEED_ADMIN_EMAIL,
+  firstName: 'Admin',
+  lastName: 'E2E',
+  roles: ['ADMIN'],
+});
+byEmail.set(SEED_ADMIN_EMAIL, SEED_ADMIN_USER_ID);
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   const content = JSON.stringify(body);

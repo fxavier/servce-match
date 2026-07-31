@@ -4,13 +4,16 @@
  * `POST /auth/register` no BFF: cria o utilizador no Keycloak via Admin
  * REST API e, na mesma resposta, tenta login imediato.
  *
- * Divergência deliberada da anti-enumeração estrita do login (ver
- * `web/bff/src/routes/auth.ts`): no registo, ao contrário do login, um
- * email já registado devolve `409 email-already-registered` — sem isso o
- * formulário não teria forma de explicar um erro que o utilizador não
- * causou. Este ecrã nunca tenta "ajudar" mais do que a resposta do
- * servidor permite: o corpo do 201 de sucesso não é a fonte de verdade da
- * sessão — só `GET /auth/me` é.
+ * Anti-enumeração (ADR-0012 D7.3, defeito C3.1 —
+ * `docs/ESTADO-DO-SISTEMA.md`): email novo e email já registado devolvem a
+ * MESMA resposta do BFF — mesmo `status` (`201`), mesmo corpo, mesmo tempo
+ * (`web/bff/src/loginTiming.ts`). Este ecrã nunca tenta distinguir os dois
+ * casos nem "ajudar" mais do que a resposta do servidor permite: se o
+ * login automático pós-registo não confirmar sessão (`user` ausente), o
+ * ecrã mostra sempre o mesmo passo seguinte ("entra com o email e a
+ * password que indicaste"), quer a conta tenha acabado de ser criada quer
+ * já existisse. O corpo do `201` não é a fonte de verdade da sessão — só
+ * `GET /auth/me` é.
  */
 import { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -65,10 +68,14 @@ export function RegisterPage() {
         void navigate(target, { replace: true });
         return;
       }
-      // A conta foi criada (o BFF já teria rejeitado com 409 se o email
-      // estivesse em uso — ver `web/bff/src/routes/auth.ts`), mas o login
-      // automático que se segue ao registo não confirmou sessão. Não se
-      // repete aqui a tentativa; pede-se para entrar manualmente.
+      // O BFF respondeu 201 (registo aceite — ver `web/bff/src/routes/auth.ts`,
+      // ADR-0012 D7.3: o corpo é `{ registered: true }` LITERAL nos dois
+      // casos, email novo ou já registado, e nunca `409` só por o email já
+      // existir), mas `GET /auth/me` a seguir não confirmou sessão. Este
+      // ramo é indistinguível, de propósito, entre "conta nova, login
+      // automático falhou" e "email já tinha conta, a password submetida
+      // não é a do titular" — não se repete a tentativa nem se assume qual
+      // dos dois casos foi; pede-se para entrar manualmente.
       setAwaitingConfirmation(true);
     } catch (error) {
       setSubmitError(toProblem(error, 'Não foi possível concluir o registo. Tenta novamente.'));
@@ -80,10 +87,14 @@ export function RegisterPage() {
       <SectionBackground glow="both" grain className="min-h-[calc(100vh-4rem)]">
         <Seo title="Registo" description="Cria a tua conta no ServiMatch." canonicalPath="/registar" />
         <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-md flex-col items-center justify-center px-5 py-16 text-center">
-          <h1 className="text-h2 font-display font-bold text-foreground">Conta criada</h1>
+          {/* Título e texto deliberadamente neutros: este ecrã é o mesmo quer
+              a conta tenha acabado de ser criada quer já existisse (ADR-0012
+              D7.3) — "Conta criada" seria uma afirmação que nem sempre é
+              verdade e que esta app não tem como confirmar aqui. */}
+          <h1 className="text-h2 font-display font-bold text-foreground">Confirma o teu acesso</h1>
           <p className="mt-3 text-body text-muted">
-            A tua conta já está pronta a usar, mas não foi possível iniciar sessão automaticamente. Entra com o email
-            e a password que indicaste.
+            Não foi possível iniciar sessão automaticamente a seguir ao pedido de registo. Entra com o email e a
+            password que indicaste.
           </p>
           <Link
             to={`/entrar?returnTo=${encodeURIComponent(returnTo)}`}

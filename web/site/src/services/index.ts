@@ -1,3 +1,4 @@
+import { adminServiceHttp } from './http/adminService';
 import { categoriesServiceHttp } from './http/categoriesService';
 import { chatServiceHttp } from './http/chatService';
 import { providerDashboardServiceHttp } from './http/providerDashboardService';
@@ -25,6 +26,7 @@ export const services: Services = {
   subscriptions: subscriptionsServiceHttp,
   uploads: uploadsServiceHttp,
   providerDashboard: providerDashboardServiceHttp,
+  admin: adminServiceHttp,
 };
 
 export * from './interfaces';

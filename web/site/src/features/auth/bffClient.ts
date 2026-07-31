@@ -98,12 +98,14 @@ export async function login(credentials: LoginCredentials): Promise<void> {
 }
 
 /**
- * `POST /auth/register` (ADR-0012 D2): cria o utilizador no Keycloak via
- * Admin REST API e faz login imediato na mesma resposta. Lança em `409`
- * (email já registado — o BFF opta por essa divergência da
- * anti-enumeração estrita no registo, ver `web/bff/src/routes/auth.ts`) e
- * nos restantes erros. Numa resposta de sucesso, `fetchSession()` a seguir
- * confirma se o login automático pós-registo ficou mesmo autenticado.
+ * `POST /auth/register` (ADR-0012 D2, D7.3): cria o utilizador no Keycloak
+ * via Admin REST API e faz login imediato na mesma resposta. Email novo e
+ * email já registado devolvem a MESMA resposta (`201`) — o BFF nunca expõe
+ * `409` para isto (ver `web/bff/src/routes/auth.ts`, defeito C3.1 em
+ * `docs/ESTADO-DO-SISTEMA.md`); este cliente só lança nos erros genuínos
+ * (validação, password fraca, indisponibilidade). Numa resposta de
+ * sucesso, `fetchSession()` a seguir confirma se o login automático
+ * pós-registo ficou mesmo autenticado.
  */
 export async function register(input: RegisterInput): Promise<void> {
   await postAuthAction('/auth/register', input);

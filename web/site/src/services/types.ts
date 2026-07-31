@@ -55,5 +55,9 @@ export type ConversationPage = Schemas['ConversationPage'];
 export type BookingDetail = Schemas['BookingDetail'];
 export type ReviewWithAuthor = Schemas['ReviewWithAuthor'];
 export type ReviewWithAuthorPage = Schemas['ReviewWithAuthorPage'];
+export type ProviderApprovalStatus = Schemas['ProviderApprovalStatus'];
+export type ProviderApprovalDecision = Schemas['ProviderApprovalDecision'];
+export type UpdateProviderApproval = Schemas['UpdateProviderApproval'];
+export type ProviderApproval = Schemas['ProviderApproval'];
 
 export type ApiOperations = operations;
