@@ -208,12 +208,24 @@ class AcceptProposalIntegrationTest {
         return id;
     }
 
+    /**
+     * {@code approval_status='APPROVED'} por {@code INSERT} direto é um
+     * atalho de setup — a transição real ({@code PENDING → APPROVED} via
+     * {@code PATCH /v1/admin/providers/{id}/approval}) é responsabilidade de
+     * {@code modules/providers} (defeito C1, docs/ESTADO-DO-SISTEMA.md), com
+     * o seu próprio teste de transição nesse módulo. {@code
+     * approval_decided_by}/{@code approval_decided_at} só satisfazem aqui o
+     * {@code CHECK chk_provider_profile_approval_decision_coherence} (V22);
+     * reutiliza-se o {@code userId} do próprio prestador como autor fictício.
+     */
     private UUID insertEligibleProvider(String keycloakSub, UUID categoryId) {
         UUID userId = insertUser(keycloakSub);
         UUID providerId = UUID.randomUUID();
         jdbcClient.sql("""
-                        INSERT INTO provider_profile (id, user_id, approval_status, visibility_state)
-                        VALUES (:id, :userId, 'APPROVED', 'VISIBLE')
+                        INSERT INTO provider_profile (
+                            id, user_id, approval_status, approval_decided_by, approval_decided_at, visibility_state
+                        )
+                        VALUES (:id, :userId, 'APPROVED', :userId, now(), 'VISIBLE')
                         """)
                 .param("id", providerId)
                 .param("userId", userId)

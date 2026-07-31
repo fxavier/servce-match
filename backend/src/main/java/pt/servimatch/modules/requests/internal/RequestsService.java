@@ -25,6 +25,7 @@ import pt.servimatch.modules.requests.internal.web.ServiceRequestDto;
 import pt.servimatch.modules.requests.internal.web.ServiceRequestPageDto;
 
 import java.time.Instant;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -158,7 +159,10 @@ class RequestsService implements RequestsApi {
      * vazia silenciosa faria o cliente acreditar que não tem pedidos.
      */
     public ServiceRequestPageDto listMine(UUID customerId, String statusFilter, String cursor, int limit) {
-        String status = parseStatusFilter(statusFilter);
+        // Sem allowlist: o dono do pedido pode legitimamente listar qualquer
+        // estado seu, incluindo DRAFT — só a validação de pertença ao enum
+        // se aplica aqui (ver javadoc de {@link #parseStatusFilter}).
+        String status = parseStatusFilter(statusFilter, null);
         CursorCodec.Position after = CursorCodec.decode(cursor).orElse(null);
 
         List<ServiceRequestRow> rows = repository.findPageForCustomer(customerId, status, after, limit + 1);
@@ -171,15 +175,49 @@ class RequestsService implements RequestsApi {
         return new ServiceRequestPageDto(toDtoPage(page, AddressExposure.EXACT), new PageMetaDto(nextCursor));
     }
 
-    private static String parseStatusFilter(String raw) {
+    /**
+     * Allowlist de {@code status} aceite em {@code GET
+     * /v1/providers/me/requests} (ver {@link #listInbox}): {@code DRAFT}
+     * nunca é um estado que um prestador possa pedir — nem sequer para o
+     * rejeitar com {@code 403}, que seria um oráculo de existência. É
+     * {@code 400}, porque o estado pedido é inválido para este endpoint,
+     * independentemente de quem pergunta (CLAUDE.md/relatório de entrega,
+     * defeito C4 — IDOR: {@code listInbox} devolvia {@code DRAFT} de
+     * qualquer cliente, incluindo morada completa, porque o {@code status}
+     * cru chegava direto à consulta sem validação).
+     */
+    private static final Set<ServiceRequestStatus> INBOX_ALLOWED_STATUSES =
+            EnumSet.of(ServiceRequestStatus.PUBLISHED, ServiceRequestStatus.IN_NEGOTIATION);
+
+    /**
+     * Valida {@code raw} contra o enum {@link ServiceRequestStatus} e,
+     * quando fornecido, contra uma allowlist adicional mais restrita do que
+     * o enum inteiro — reutilizado por {@link #listMine} (sem allowlist: o
+     * dono vê qualquer estado seu) e {@link #listInbox} (allowlist {@code
+     * {PUBLISHED, IN_NEGOTIATION}}: o que o prestador pode legitimamente
+     * pedir é sempre um subconjunto mais apertado do que o que o cliente
+     * pode pedir sobre os seus próprios pedidos, nunca um método de
+     * validação novo — a regra é "que estados este viewer pode pedir",
+     * não "é um valor de enum válido"). Fora do enum ou fora da allowlist:
+     * mesmo {@code 400} ({@link Problems#badRequest}) — nunca degradado
+     * para página vazia silenciosa, e nunca {@code 403}: o estado pedido é
+     * inválido para este endpoint, não é uma questão de permissão sobre um
+     * recurso concreto.
+     */
+    private static String parseStatusFilter(String raw, Set<ServiceRequestStatus> allowlist) {
         if (raw == null || raw.isBlank()) {
             return null;
         }
+        ServiceRequestStatus status;
         try {
-            return ServiceRequestStatus.valueOf(raw).name();
+            status = ServiceRequestStatus.valueOf(raw);
         } catch (IllegalArgumentException e) {
             throw Problems.badRequest("Valor de 'status' inválido: '" + raw + "'.");
         }
+        if (allowlist != null && !allowlist.contains(status)) {
+            throw Problems.badRequest("Valor de 'status' inválido: '" + raw + "'.");
+        }
+        return status.name();
     }
 
     /**
@@ -255,15 +293,33 @@ class RequestsService implements RequestsApi {
      * <p><b>Morada:</b> o viewer é sempre um prestador aqui — nunca o dono
      * do pedido — por isso a página inteira é {@link AddressExposure#ZONE}
      * (ver nota de auditoria em {@link #getForViewer}).
+     *
+     * <p><b>{@code status}:</b> validado por {@link #parseStatusFilter} contra
+     * {@link #INBOX_ALLOWED_STATUSES} ({@code {PUBLISHED, IN_NEGOTIATION}}).
+     * Antes desta correção o parâmetro chegava cru à consulta — {@code
+     * ?status=DRAFT} devolvia pedidos ainda não publicados de qualquer
+     * cliente, incluindo morada completa e código postal (defeito C4, IDOR;
+     * ver relatório de entrega). Fora da allowlist é sempre {@code 400}
+     * ({@link Problems#badRequest}), nunca {@code 403}: o estado pedido é
+     * inválido para este endpoint, não é uma questão de permissão sobre um
+     * pedido concreto.
      */
     public ServiceRequestPageDto listInbox(UUID providerId, String statusFilter, String cursor, int limit) {
+        // Validar o parâmetro de entrada antes de qualquer acesso a dados: um
+        // 400 por 'status' inválido nunca deve depender de o prestador ter
+        // categorias associadas ou não — senão o mesmo pedido dá 400 ou 200
+        // consoante o estado de outro dado, o que é uma inconsistência de API
+        // desnecessária (e, em teoria, um bit de informação sobre o perfil do
+        // prestador).
+        String status = parseStatusFilter(statusFilter, INBOX_ALLOWED_STATUSES);
+
         Set<UUID> workedCategoryIds = providersApi.workedCategoryIds(providerId);
         if (workedCategoryIds.isEmpty()) {
             return new ServiceRequestPageDto(List.of(), new PageMetaDto(null));
         }
 
-        List<String> statuses = statusFilter != null
-                ? List.of(statusFilter)
+        List<String> statuses = status != null
+                ? List.of(status)
                 : List.of(ServiceRequestStatus.PUBLISHED.name(), ServiceRequestStatus.IN_NEGOTIATION.name());
         CursorCodec.Position after = CursorCodec.decode(cursor).orElse(null);
 
