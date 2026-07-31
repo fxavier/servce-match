@@ -18,6 +18,7 @@ import type {
   MessagePage,
   Proposal,
   ProposalPage,
+  ProviderApproval,
   ProviderProfile,
   ProviderSummary,
   RequestStatus,
@@ -28,6 +29,7 @@ import type {
   Subscription,
   SubscriptionCheckout,
   SubscriptionPlan,
+  UpdateProviderApproval,
   UpdateProviderProfile,
   UploadTarget,
 } from './types';
@@ -106,6 +108,26 @@ export interface ProviderDashboardService {
   stats(): Promise<ProviderDashboardStats>;
 }
 
+/**
+ * Área `/admin` (CLAUDE.md, ARQUITETURA §4.1/§19.1). O contrato só define,
+ * por agora, a decisão em si (`decideProviderApproval`,
+ * `PATCH /v1/admin/providers/{providerId}/approval`) — **não existe**
+ * nenhum `GET` para listar prestadores pendentes nem para ver o detalhe de
+ * um que ainda não esteja visível publicamente. Isso é uma lacuna de
+ * contrato (reportada ao `api-contract`, não contornada aqui): a UI que
+ * consome este serviço decide por `providerId` conhecido, não por uma
+ * lista fabricada no cliente.
+ */
+export interface AdminService {
+  /**
+   * `PATCH /v1/admin/providers/{providerId}/approval`. `idempotencyKey`
+   * vai sempre preenchida — o mesmo valor entre um duplo clique não deve
+   * produzir duas decisões (o servidor é a autoridade sobre a
+   * idempotência; ver `platform/idempotency`).
+   */
+  decideProviderApproval(providerId: string, body: UpdateProviderApproval, idempotencyKey: string): Promise<ProviderApproval>;
+}
+
 export interface Services {
   categories: CategoriesService;
   providers: ProvidersService;
@@ -116,4 +138,5 @@ export interface Services {
   subscriptions: SubscriptionsService;
   uploads: UploadsService;
   providerDashboard: ProviderDashboardService;
+  admin: AdminService;
 }

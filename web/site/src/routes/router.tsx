@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import { SkeletonText } from '../components/ui/Skeleton';
+import { AdminLayout } from '../layouts/AdminLayout';
 import { AppLayout } from '../layouts/AppLayout';
 import { ProviderLayout } from '../layouts/ProviderLayout';
 import { PublicLayout } from '../layouts/PublicLayout';
@@ -38,6 +39,10 @@ const ProviderRequestDetailPage = lazy(() => import('./pages/ProviderRequestDeta
 const ProviderProposalsPage = lazy(() => import('./pages/ProviderProposalsPage').then((m) => ({ default: m.ProviderProposalsPage })));
 const ProviderProfileEditPage = lazy(() => import('./pages/ProviderProfileEditPage').then((m) => ({ default: m.ProviderProfileEditPage })));
 const ProviderSubscriptionPage = lazy(() => import('./pages/ProviderSubscriptionPage').then((m) => ({ default: m.ProviderSubscriptionPage })));
+
+const AdminProviderApprovalsPage = lazy(() =>
+  import('./pages/AdminProviderApprovalsPage').then((m) => ({ default: m.AdminProviderApprovalsPage })),
+);
 
 function RouteFallback() {
   return (
@@ -98,6 +103,16 @@ export function AppRouter() {
           <Route path="pro/propostas" element={<ProviderProposalsPage />} />
           <Route path="pro/perfil" element={<ProviderProfileEditPage />} />
           <Route path="pro/subscricao" element={<ProviderSubscriptionPage />} />
+        </Route>
+
+        <Route
+          element={
+            <ProtectedRoute roles={['ADMIN']}>
+              <AdminLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="admin" element={<AdminProviderApprovalsPage />} />
         </Route>
       </Routes>
     </Suspense>

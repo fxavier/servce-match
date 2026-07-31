@@ -17,7 +17,11 @@ export function SiteHeader() {
   const { status, user, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const isProvider = user?.roles.includes('PROVIDER');
-  const dashboardHref = isProvider ? '/pro' : '/painel';
+  // Mesma prioridade de `features/auth/dashboardPath.ts::defaultDashboardFor`
+  // — PROVIDER > ADMIN > painel de cliente por omissão.
+  const isAdminOnly = !isProvider && user?.roles.includes('ADMIN');
+  const dashboardHref = isProvider ? '/pro' : isAdminOnly ? '/admin' : '/painel';
+  const dashboardLabel = isProvider ? 'Painel do prestador' : isAdminOnly ? 'Administração' : 'O meu painel';
 
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-background/85 backdrop-blur-md">
@@ -53,7 +57,7 @@ export function SiteHeader() {
                 className="inline-flex items-center gap-2 rounded-full border border-line px-4 py-2 text-sm font-medium text-foreground hover:border-orange-500/40"
               >
                 <LayoutDashboard aria-hidden="true" className="size-4" strokeWidth={1.5} />
-                {isProvider ? 'Painel do prestador' : 'O meu painel'}
+                {dashboardLabel}
               </Link>
               <Avatar name={user.displayName} imageUrl={user.avatarUrl} size="sm" />
               <button
@@ -125,7 +129,7 @@ export function SiteHeader() {
                   onClick={() => setOpen(false)}
                   className="rounded-md px-3 py-3.5 text-lg font-medium text-foreground hover:bg-surface-2"
                 >
-                  {isProvider ? 'Painel do prestador' : 'O meu painel'}
+                  {dashboardLabel}
                 </Link>
                 <button
                   type="button"

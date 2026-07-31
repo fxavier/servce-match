@@ -1,5 +1,6 @@
 import express from 'express';
 import { randomUUID } from 'node:crypto';
+import { SEED_PENDING_PROVIDER_ID } from '../fixtures.js';
 
 /**
  * Backend de domínio falso para o E2E — implementa só os endpoints do
@@ -43,10 +44,46 @@ interface ProposalRecord {
   createdAt: string;
 }
 
+/**
+ * `approval_status` de um prestador falso (defeito C1,
+ * `docs/ESTADO-DO-SISTEMA.md`). Só o suficiente para exercitar
+ * `PATCH /v1/admin/providers/{id}/approval` (`decideProviderApproval`,
+ * `openapi.yaml:800`) — este mock não tem `GET` de listagem/detalhe porque
+ * o contrato real também não tem (lacuna reportada, ver
+ * `web/site/src/features/admin/AdminApprovalConsole.tsx`).
+ */
+interface ProviderApprovalRecord {
+  providerId: string;
+  approvalStatus: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED';
+  reason: string | null;
+  decidedBy: string | null;
+  decidedAt: string | null;
+}
+
 const CATEGORY = { id: 'cat-canalizacao', parentId: null, slug: 'canalizacao', name: 'Canalização', active: true };
 
 const requests = new Map<string, ServiceRequestRecord>();
 const proposalsByRequest = new Map<string, ProposalRecord[]>();
+
+// Prestador seed, fixo, para o E2E de aprovação (evita depender de um
+// `POST /v1/providers` que não existe no fluxo crítico já coberto por
+// `main-flow.spec.ts`). Começa `PENDING`, como qualquer prestador real.
+// `SEED_PENDING_PROVIDER_ID` vem de `../fixtures.ts` (UUID, porque
+// `providerId` é validado como UUID no cliente —
+// `features/admin/adminApprovalSchemas.ts`) para que
+// `web/e2e/tests/admin-approval.spec.ts` use o mesmo valor sem importar
+// este módulo (que arrancaria o servidor uma segunda vez — ver `fixtures.ts`).
+const providerApprovals = new Map<string, ProviderApprovalRecord>([
+  [
+    SEED_PENDING_PROVIDER_ID,
+    { providerId: SEED_PENDING_PROVIDER_ID, approvalStatus: 'PENDING', reason: null, decidedBy: null, decidedAt: null },
+  ],
+]);
+
+const VALID_TRANSITIONS: Record<string, ('APPROVED' | 'REJECTED' | 'SUSPENDED')[]> = {
+  PENDING: ['APPROVED', 'REJECTED'],
+  APPROVED: ['SUSPENDED'],
+};
 
 function problem(status: number, slug: string, title: string, detail?: string) {
   return {
@@ -56,6 +93,34 @@ function problem(status: number, slug: string, title: string, detail?: string) {
     ...(detail ? { detail } : {}),
   };
 }
+
+/**
+ * Extrai `sub`/`realm_access.roles` do `access_token` que o BFF reencaminha
+ * em `Authorization: Bearer` (`web/bff/src/proxy.ts` — nunca reencaminha o
+ * cookie de sessão, só o token). Decodificação sem verificação de
+ * assinatura: este processo não tem o JWKS do `mock-oidc` (nem devia
+ * precisar — não é o que este mock testa); é suficiente para simular a
+ * verificação de `ROLE_ADMIN` que o backend real faz com
+ * `@PreAuthorize("hasRole('ADMIN')")` antes de tocar em qualquer dado
+ * (ONDA-C1 §1 — "role verificada antes de carregar o alvo, para não criar
+ * oráculo 403/404").
+ */
+function claimsFromAuthorization(req: express.Request): { sub?: string; roles: string[] } {
+  const header = req.header('authorization') ?? '';
+  const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length) : undefined;
+  const payloadSegment = token?.split('.')[1];
+  if (!payloadSegment) return { roles: [] };
+  try {
+    const json = Buffer.from(payloadSegment, 'base64url').toString('utf8');
+    const payload = JSON.parse(json) as { sub?: string; realm_access?: { roles?: string[] } };
+    return { sub: payload.sub, roles: payload.realm_access?.roles ?? [] };
+  } catch {
+    return { roles: [] };
+  }
+}
+
+/** Resultados de decisões já aplicadas, por `Idempotency-Key` — uma repetição devolve o mesmo resultado em vez de reaplicar a transição. */
+const idempotentDecisions = new Map<string, { status: number; body: unknown }>();
 
 export function createMockBackend() {
   const app = express();
@@ -174,6 +239,87 @@ export function createMockBackend() {
       }
     }
     res.status(404).type('application/problem+json').json(problem(404, 'not-found', 'Proposta não encontrada.'));
+  });
+
+  // PATCH /v1/admin/providers/{providerId}/approval (decideProviderApproval,
+  // openapi.yaml:800) — defeito C1. Único endpoint `Admin` do contrato hoje.
+  app.patch('/v1/admin/providers/:providerId/approval', (req, res) => {
+    const { sub, roles } = claimsFromAuthorization(req);
+    if (!roles.includes('ADMIN')) {
+      // Role verificada ANTES de tocar no prestador — nunca 404 primeiro
+      // (evitaria um oráculo 403/404 sobre a existência do recurso).
+      res.status(403).type('application/problem+json').json(problem(403, 'forbidden', 'Sem permissão de administrador.'));
+      return;
+    }
+
+    const record = providerApprovals.get(req.params.providerId);
+    if (!record) {
+      res.status(404).type('application/problem+json').json(problem(404, 'not-found', 'Prestador não encontrado.'));
+      return;
+    }
+
+    const idempotencyKey = req.header('idempotency-key');
+    const idempotencyCacheKey = idempotencyKey ? `${req.params.providerId}:${idempotencyKey}` : undefined;
+    if (idempotencyCacheKey) {
+      const cached = idempotentDecisions.get(idempotencyCacheKey);
+      if (cached) {
+        res.status(cached.status).json(cached.body);
+        return;
+      }
+    }
+
+    const body = (req.body ?? {}) as { decision?: string; reason?: string };
+    const decision = body.decision;
+    if (decision !== 'APPROVED' && decision !== 'REJECTED' && decision !== 'SUSPENDED') {
+      res
+        .status(400)
+        .type('application/problem+json')
+        .json(problem(400, 'validation', 'Dados inválidos', 'decision tem de ser APPROVED, REJECTED ou SUSPENDED.'));
+      return;
+    }
+
+    const reason = typeof body.reason === 'string' && body.reason.trim().length > 0 ? body.reason.trim() : undefined;
+    if ((decision === 'REJECTED' || decision === 'SUSPENDED') && !reason) {
+      res
+        .status(422)
+        .type('application/problem+json')
+        .json({
+          ...problem(422, 'validation', 'Dados inválidos', 'reason é obrigatório para REJECTED e SUSPENDED.'),
+          errors: [{ field: 'reason', message: 'O motivo é obrigatório para esta decisão.' }],
+        });
+      return;
+    }
+
+    const allowedTargets = VALID_TRANSITIONS[record.approvalStatus] ?? [];
+    if (!allowedTargets.includes(decision)) {
+      res
+        .status(409)
+        .type('application/problem+json')
+        .json(
+          problem(
+            409,
+            'conflict',
+            'Transição inválida.',
+            `O prestador está em ${record.approvalStatus}; não é possível aplicar ${decision}.`,
+          ),
+        );
+      return;
+    }
+
+    record.approvalStatus = decision;
+    record.reason = reason ?? null;
+    record.decidedBy = sub ?? 'e2e-admin-unknown';
+    record.decidedAt = new Date().toISOString();
+
+    const responseBody = {
+      providerId: record.providerId,
+      approvalStatus: record.approvalStatus,
+      reason: record.reason,
+      decidedBy: record.decidedBy,
+      decidedAt: record.decidedAt,
+    };
+    if (idempotencyCacheKey) idempotentDecisions.set(idempotencyCacheKey, { status: 200, body: responseBody });
+    res.status(200).json(responseBody);
   });
 
   return app;

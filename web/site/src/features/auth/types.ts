@@ -36,11 +36,14 @@ export interface AuthContextValue {
    */
   login: (credentials: LoginCredentials) => Promise<SessionUser>;
   /**
-   * `POST /auth/register` no BFF (ADR-0012 D2) — cria a conta no Keycloak
-   * (Admin REST API) e faz login imediato na mesma resposta. Um email já
-   * registado é rejeitado com `409` (lança); o único caso em que isto
-   * devolve `undefined` sem lançar é uma conta criada com sucesso cujo
-   * login automático subsequente não confirmou sessão.
+   * `POST /auth/register` no BFF (ADR-0012 D2, D7.3) — cria a conta no
+   * Keycloak (Admin REST API) e faz login imediato na mesma resposta.
+   * Email novo e email já registado devolvem a MESMA resposta (`201`) —
+   * nunca `409` só por o email já existir (defeito C3.1,
+   * `docs/ESTADO-DO-SISTEMA.md`, já corrigido). Devolve `undefined` sem
+   * lançar sempre que o login automático subsequente não confirmou sessão
+   * — quer a conta tenha acabado de ser criada quer já existisse; este
+   * cliente não tem como distinguir os dois casos, de propósito.
    */
   register: (input: RegisterInput) => Promise<SessionUser | undefined>;
   logout: () => Promise<void>;
