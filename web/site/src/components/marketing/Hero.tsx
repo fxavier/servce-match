@@ -41,8 +41,13 @@ export function Hero() {
           <Reveal>
             <p className="eyebrow text-signal-500">SERVIÇOS LOCAIS · PORTUGAL</p>
           </Reveal>
-          <Reveal delay={0.05}>
-            <h1 className="mt-4 text-hero font-display font-extrabold text-foreground">
+          {/* `@container` (container-type: inline-size): o passo fluido de
+              --text-hero é em cqw e resolve contra este wrapper — a largura
+              real da coluna do título, não o viewport. Fica aqui, e não na
+              coluna do grid: containment na coluna anularia o min-content do
+              formulário, que é o que segura a track `1.05fr` nos ~665px. */}
+          <Reveal delay={0.05} className="@container">
+            <h1 className="mt-4 text-balance text-hero font-display font-extrabold text-foreground">
               Descreva o problema. Receba <span className="text-gradient-energy">orçamentos</span> de profissionais da
               sua zona.
             </h1>

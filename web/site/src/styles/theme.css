@@ -51,21 +51,29 @@
   --color-accent-fg: #ffffff;
   --color-whatsapp-fg: var(--sm-whatsapp-fg);
 
-  /* --- Tipografia: três famílias (§5.2) --- */
+  /* --- Tipografia: três famílias --- */
   --font-display: 'Archivo', system-ui, sans-serif;
   --font-sans: 'Instrument Sans', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
 
-  /* Escala fluida de tipografia display. Ajustada por medição real (Playwright,
-     ver web/site — Hero.tsx) para o título de 68 caracteres do Hero: os
-     valores antigos (2.75rem / 7vw / 5.5rem) produziam 6-7 linhas em quase
-     todas as larguras testadas (320-1536px), muito acima do razoável para um
-     título de display. Os novos limites mantêm --text-hero sempre acima de
-     --text-h1 (clamp(2rem, 4.5vw, 3.25rem)) com margem de segurança, o que é
-     o fator dominante: nas larguras 320, 390, 1024, 1280 e 1536 essa margem
-     — não o comprimento do texto — é o que impede 2-3 linhas perfeitas; ver
-     tabela de medições no PR/relatório do agente `web-site`. */
-  --text-hero: clamp(2.125rem, 5vw, 3.625rem);
+  /* Escala fluida de tipografia display, ajustada por medição real
+     (Playwright, 320-1536px; ver Hero.tsx).
+
+     --text-hero usa cqw (container query width) e não vw: o <h1> do Hero
+     vive numa coluna de grid (~665px a lg+) e o vw escalava pelo viewport
+     inteiro, pelo que a fonte não acompanhava o estreitamento da coluna no
+     breakpoint lg — 58px em 665px dava 4 linhas a 1280/1536. O container é
+     o wrapper `@container` do <h1> em Hero.tsx; fora de um container, cqw
+     degrada para svw (≈ comportamento antigo). Com 8.1cqw o rácio
+     fonte/coluna é constante (~53.8px em 665px → 3 linhas; janela medida:
+     4 linhas a partir de ~55.2px, i.e. 8.3cqw).
+
+     Hierarquia hero > h1: já não é comparável algebricamente (cqw vs vw),
+     mas verifica-se em píxeis renderizados em todas as larguras testadas —
+     a lg+, 8.1cqw × 665px = 53.8px > 52px (teto de --text-h1); abaixo de
+     lg a coluna é o viewport menos padding e o piso 2.125rem > 2rem. Se a
+     largura da coluna do Hero mudar, revalidar por medição. */
+  --text-hero: clamp(2.125rem, 8.1cqw, 3.625rem);
   --text-hero--line-height: 1.1;
   --text-hero--letter-spacing: -0.03em;
 
