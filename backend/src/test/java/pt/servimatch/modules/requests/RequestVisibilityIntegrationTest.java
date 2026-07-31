@@ -105,6 +105,58 @@ class RequestVisibilityIntegrationTest {
                 .andExpect(jsonPath("$.address.postalCode").value("1000"));
     }
 
+    /**
+     * Defeito C4 (IDOR), reverificado a nível HTTP: antes desta onda
+     * {@code ?status=DRAFT} devolvia rascunhos de qualquer cliente a um
+     * prestador, incluindo morada completa e código postal — a mesma
+     * granularidade de morada que {@link #eligibleProviderSeesTheRequestInInboxAndDetail}
+     * prova estar mascarada para pedidos publicados. {@code DRAFT} é um
+     * valor de enum válido, por isso é a allowlist do inbox (não o enum
+     * inteiro) que tem de o rejeitar.
+     */
+    @Test
+    void inboxRejectsDraftStatusFilterEvenForAnOtherwiseEligibleProvider() throws Exception {
+        UUID categoryId = insertCategory();
+        UUID customerId = insertUser("kc-req-vis-cust-draft-" + UUID.randomUUID());
+        insertPublishedRequest(customerId, categoryId, 38.7169, -9.1399, "PT-11-LSB");
+
+        String providerSub = "kc-req-vis-prov-draft-" + UUID.randomUUID();
+        UUID providerId = insertEligibleProvider(providerSub, categoryId);
+        insertRadiusArea(providerId, 38.7169, -9.1399, 5_000);
+
+        mockMvc.perform(get("/v1/providers/me/requests").param("status", "DRAFT").with(providerJwt(providerSub)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("https://errors.servimatch.pt/validation"));
+    }
+
+    @Test
+    void inboxRejectsStatusFilterOutsideTheEnum() throws Exception {
+        String providerSub = "kc-req-vis-prov-lixo-" + UUID.randomUUID();
+        UUID categoryId = insertCategory();
+        UUID providerId = insertEligibleProvider(providerSub, categoryId);
+        insertRadiusArea(providerId, 38.7169, -9.1399, 5_000);
+
+        mockMvc.perform(get("/v1/providers/me/requests").param("status", "lixo").with(providerJwt(providerSub)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("https://errors.servimatch.pt/validation"));
+    }
+
+    @Test
+    void inboxAcceptsPublishedStatusFilterAndKeepsZoneAddressExposure() throws Exception {
+        UUID categoryId = insertCategory();
+        UUID customerId = insertUser("kc-req-vis-cust-pub-" + UUID.randomUUID());
+        UUID requestId = insertPublishedRequest(customerId, categoryId, 38.7169, -9.1399, "PT-11-LSB");
+
+        String providerSub = "kc-req-vis-prov-pub-" + UUID.randomUUID();
+        UUID providerId = insertEligibleProvider(providerSub, categoryId);
+        insertRadiusArea(providerId, 38.7169, -9.1399, 5_000);
+
+        mockMvc.perform(get("/v1/providers/me/requests").param("status", "PUBLISHED").with(providerJwt(providerSub)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[?(@.id=='" + requestId + "')]").exists())
+                .andExpect(jsonPath("$.items[0].address.line1").doesNotExist());
+    }
+
     @Test
     void ownerAlwaysSeesTheExactAddressOfTheirOwnRequest() throws Exception {
         UUID categoryId = insertCategory();
@@ -179,13 +231,32 @@ class RequestVisibilityIntegrationTest {
         return id;
     }
 
-    /** Prestador aprovado, visível, com subscrição ativa e a categoria indicada — falta só cobertura geográfica. */
+    /**
+     * Prestador aprovado, visível, com subscrição ativa e a categoria
+     * indicada — falta só cobertura geográfica.
+     *
+     * <p>{@code approval_status='APPROVED'} por {@code INSERT} direto é um
+     * atalho de setup para estes testes de elegibilidade/inbox, não uma
+     * afirmação de como a aprovação acontece em produção — essa transição
+     * ({@code PENDING → APPROVED} pelo endpoint {@code PATCH
+     * /v1/admin/providers/{id}/approval}) é responsabilidade de
+     * {@code modules/providers} (defeito C1, docs/ESTADO-DO-SISTEMA.md) e
+     * tem o seu próprio teste de transição nesse módulo. {@code
+     * approval_decided_by}/{@code approval_decided_at} são preenchidos aqui
+     * só para satisfazer o {@code CHECK
+     * chk_provider_profile_approval_decision_coherence} (V22) — reutiliza-se
+     * o próprio {@code userId} do prestador como autor fictício da decisão,
+     * porque o único requisito do {@code CHECK} é autoria+instante, não
+     * quem especificamente decidiu.
+     */
     private UUID insertEligibleProvider(String keycloakSub, UUID categoryId) {
         UUID userId = insertUser(keycloakSub);
         UUID providerId = UUID.randomUUID();
         jdbcClient.sql("""
-                        INSERT INTO provider_profile (id, user_id, approval_status, visibility_state)
-                        VALUES (:id, :userId, 'APPROVED', 'VISIBLE')
+                        INSERT INTO provider_profile (
+                            id, user_id, approval_status, approval_decided_by, approval_decided_at, visibility_state
+                        )
+                        VALUES (:id, :userId, 'APPROVED', :userId, now(), 'VISIBLE')
                         """)
                 .param("id", providerId)
                 .param("userId", userId)

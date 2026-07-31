@@ -24,6 +24,7 @@ import pt.servimatch.modules.requests.internal.web.ServiceRequestPageDto;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -227,6 +228,64 @@ class RequestsServiceTest {
             assertThat(dto.address().line1()).isEqualTo("Rua Teste");
             assertThat(dto.address().postalCode()).isEqualTo("1000-001");
         });
+    }
+
+    // ---------------------------------------------------------------- listInbox (GET /v1/providers/me/requests)
+
+    private final UUID providerId = UUID.randomUUID();
+
+    /**
+     * Defeito C4 (IDOR) fechado nesta onda: {@code ?status=DRAFT} devolvia
+     * pedidos ainda não publicados de qualquer cliente, incluindo morada
+     * completa e código postal, porque o {@code statusFilter} chegava cru à
+     * consulta. {@code DRAFT} é um valor de enum válido — por isso não basta
+     * a validação genérica de {@link ServiceRequestStatus#valueOf}; tem de
+     * ser rejeitado pela allowlist do inbox, que é mais estrita do que a de
+     * {@code listMine}.
+     */
+    @Test
+    void listInboxRejectsDraftStatusFilterEvenThoughItIsAValidEnumValue() {
+        assertThatThrownBy(() -> service.listInbox(providerId, "DRAFT", null, 20))
+                .isInstanceOfSatisfying(ErrorResponseException.class,
+                        ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+
+        verify(repository, never()).findPage(any(), any(), any(), anyInt());
+        verify(providersApi, never()).workedCategoryIds(any());
+    }
+
+    @Test
+    void listInboxRejectsStatusFilterOutsideTheEnumEntirely() {
+        assertThatThrownBy(() -> service.listInbox(providerId, "lixo", null, 20))
+                .isInstanceOfSatisfying(ErrorResponseException.class,
+                        ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+
+        verify(repository, never()).findPage(any(), any(), any(), anyInt());
+    }
+
+    @Test
+    void listInboxAcceptsPublishedStatusFilter() {
+        when(providersApi.workedCategoryIds(providerId)).thenReturn(Set.of(categoryId));
+        ServiceRequestRow published = row("PUBLISHED", Instant.now());
+        when(repository.findPage(eq(List.of("PUBLISHED")), any(), any(), anyInt()))
+                .thenReturn(List.of(published));
+        when(matchingApi.filterEligibleRequestIds(eq(providerId), any())).thenReturn(Set.of(requestId));
+
+        ServiceRequestPageDto page = service.listInbox(providerId, "PUBLISHED", null, 20);
+
+        assertThat(page.items()).hasSize(1);
+        verify(repository).findPage(eq(List.of("PUBLISHED")), any(), any(), anyInt());
+    }
+
+    /** Sem parâmetro: mantém o comportamento atual — allowlist {@code {PUBLISHED, IN_NEGOTIATION}} por omissão. */
+    @Test
+    void listInboxWithNoStatusFilterKeepsThePublishedAndInNegotiationDefault() {
+        when(providersApi.workedCategoryIds(providerId)).thenReturn(Set.of(categoryId));
+        when(repository.findPage(eq(List.of("PUBLISHED", "IN_NEGOTIATION")), any(), any(), anyInt()))
+                .thenReturn(List.of());
+
+        service.listInbox(providerId, null, null, 20);
+
+        verify(repository).findPage(eq(List.of("PUBLISHED", "IN_NEGOTIATION")), any(), any(), anyInt());
     }
 
     // ---------------------------------------------------------------- exposição de morada (getForViewer)
