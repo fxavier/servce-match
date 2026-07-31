@@ -54,6 +54,26 @@
  * uma dependência Java direta; escalar ao {@code arquiteto} antes de a
  * abrir aqui.
  *
+ * <p><b>{@code platform.audit} — nenhuma alteração a {@code allowedDependencies}
+ * (decisão desta revisão, defeito C1 de {@code docs/ESTADO-DO-SISTEMA.md}).</b>
+ * A decisão administrativa de aprovação de prestador
+ * ({@code PATCH /v1/admin/providers/{providerId}/approval}, a implementar por
+ * {@code backend-domain-providers}) regista-se em {@code audit_log} através de
+ * {@code pt.servimatch.platform.audit.AuditLogWriter}. Não é preciso declarar
+ * {@code platform} em {@code allowedDependencies} — segue exatamente o mesmo
+ * padrão já em uso por {@code platform.error} (ver {@code internal.Problems})
+ * e {@code platform.idempotency} em todos os módulos do projeto, nenhum dos
+ * quais declara {@code platform}: {@code application.yml} configura
+ * {@code spring.modulith.detection-strategy: explicitly-annotated}, pelo que
+ * só um pacote com {@code @ApplicationModule} no seu {@code package-info.java}
+ * é reconhecido como módulo de aplicação por {@code ApplicationModules.verify()}.
+ * {@code pt.servimatch.platform} e os seus subpacotes ({@code audit},
+ * {@code error}, {@code idempotency}, {@code observability}, ...) não têm
+ * {@code package-info.java} próprio — não são módulos, são infraestrutura
+ * partilhada, livremente importável por qualquer módulo. Confirmado por
+ * {@code ModularityTests.verifiesModularStructure()} verde com esta chamada
+ * em vigor.
+ *
  * <p>Um módulo que precise de uma dependência nova pede-a a este agente.
  */
 @org.springframework.modulith.ApplicationModule(
