@@ -134,6 +134,66 @@ class ProviderRepository {
                 .single();
     }
 
+    /**
+     * Estado de aprovação atual, para {@code PATCH .../approval}: carrega o
+     * suficiente para decidir a transição (existência + estado atual) sem
+     * puxar o perfil inteiro. Reutilizado também para a releitura pós-CAS
+     * falhado (ver {@link #applyApprovalDecision}) — a mesma consulta serve
+     * o {@code 404} inicial e o {@code 409} de corrida.
+     */
+    Optional<ProviderApprovalRow> findApprovalState(UUID providerId) {
+        return jdbcClient.sql("""
+                        SELECT id, approval_status, approval_reason, approval_decided_by, approval_decided_at
+                        FROM provider_profile WHERE id = :id
+                        """)
+                .param("id", providerId)
+                .query(this::mapApprovalRow)
+                .optional();
+    }
+
+    /**
+     * CAS da decisão administrativa (V22; skill {@code admin-moderation-endpoint}
+     * §3): só escreve se {@code approval_status} ainda for
+     * {@code expectedCurrentStatus} no momento do {@code UPDATE}. Zero linhas
+     * afetadas — perdeu a corrida para outra decisão concorrente — devolve
+     * {@link Optional#empty()} sem lançar; o chamador releva com
+     * {@link #findApprovalState} e decide o {@code 409}.
+     *
+     * <p>{@code approval_decided_at = now()} no servidor, não
+     * {@code Instant.now()} em Java — mesma disciplina de
+     * {@code RequestRepository#publish} (V4 {@code published_at}): a âncora
+     * temporal da decisão é o instante em que o {@code UPDATE} de facto
+     * comita, não o instante em que o processo Java a preparou.
+     */
+    Optional<ProviderApprovalRow> applyApprovalDecision(
+            UUID providerId, String expectedCurrentStatus, String newStatus, String reason, UUID decidedBy) {
+        int rows = jdbcClient.sql("""
+                        UPDATE provider_profile
+                           SET approval_status = :newStatus,
+                               approval_reason = :reason,
+                               approval_decided_by = :decidedBy,
+                               approval_decided_at = now()
+                         WHERE id = :id AND approval_status = :expected
+                        """)
+                .param("newStatus", newStatus)
+                .param("reason", reason, java.sql.Types.VARCHAR)
+                .param("decidedBy", decidedBy)
+                .param("id", providerId)
+                .param("expected", expectedCurrentStatus)
+                .update();
+        return rows > 0 ? findApprovalState(providerId) : Optional.empty();
+    }
+
+    private ProviderApprovalRow mapApprovalRow(ResultSet rs, int rowNum) throws SQLException {
+        java.sql.Timestamp decidedAt = rs.getTimestamp("approval_decided_at");
+        return new ProviderApprovalRow(
+                (UUID) rs.getObject("id"),
+                rs.getString("approval_status"),
+                rs.getString("approval_reason"),
+                (UUID) rs.getObject("approval_decided_by"),
+                decidedAt == null ? null : decidedAt.toInstant());
+    }
+
     Optional<UUID> insertIfAbsent(UUID userId) {
         return jdbcClient.sql("""
                         INSERT INTO provider_profile (user_id)

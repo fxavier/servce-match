@@ -7,8 +7,11 @@ import pt.servimatch.modules.billing.SubscriptionLifecycle;
 import pt.servimatch.modules.billing.SubscriptionPlan;
 import pt.servimatch.modules.billing.SubscriptionStatus;
 import pt.servimatch.modules.categories.CategoriesApi;
+import pt.servimatch.modules.providers.ProviderApprovalDecision;
+import pt.servimatch.modules.providers.ProviderApprovalStatus;
 import pt.servimatch.modules.providers.ProvidersApi;
 import pt.servimatch.modules.providers.internal.web.GeoPointDto;
+import pt.servimatch.modules.providers.internal.web.ProviderApprovalDto;
 import pt.servimatch.modules.providers.internal.web.ProviderProfileDto;
 import pt.servimatch.modules.providers.internal.web.ProviderZoneDto;
 import pt.servimatch.modules.providers.internal.web.UpdateProviderProfileRequest;
@@ -16,6 +19,8 @@ import pt.servimatch.modules.uploads.ImageRef;
 import pt.servimatch.modules.uploads.UploadPurpose;
 import pt.servimatch.modules.uploads.UploadsApi;
 import pt.servimatch.modules.users.UsersApi;
+import pt.servimatch.platform.audit.AuditLogWriter;
+import pt.servimatch.platform.audit.AuditMetadata;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -38,14 +43,16 @@ class ProvidersService implements ProvidersApi {
     private final CategoriesApi categoriesApi;
     private final UploadsApi uploadsApi;
     private final SubscriptionLifecycle subscriptionLifecycle;
+    private final AuditLogWriter auditLogWriter;
 
     ProvidersService(ProviderRepository repository, UsersApi usersApi, CategoriesApi categoriesApi,
-                      UploadsApi uploadsApi, SubscriptionLifecycle subscriptionLifecycle) {
+                      UploadsApi uploadsApi, SubscriptionLifecycle subscriptionLifecycle, AuditLogWriter auditLogWriter) {
         this.repository = repository;
         this.usersApi = usersApi;
         this.categoriesApi = categoriesApi;
         this.uploadsApi = uploadsApi;
         this.subscriptionLifecycle = subscriptionLifecycle;
+        this.auditLogWriter = auditLogWriter;
     }
 
     // ---------------------------------------------------------------- ProvidersApi (público, síncrono)
@@ -216,6 +223,82 @@ class ProvidersService implements ProvidersApi {
 
         ProviderProfileRow updated = repository.findById(providerId).orElseThrow();
         return toProfileDto(updated);
+    }
+
+    /**
+     * {@code PATCH /v1/admin/providers/{providerId}/approval}: skill
+     * {@code admin-moderation-endpoint}, ADR-0011 D7. Este é o primeiro (e,
+     * até agora, único) escritor de produção de
+     * {@code provider_profile.approval_status} — a coluna existe desde a V4
+     * com {@code DEFAULT 'PENDING'} e era lida por três predicados de
+     * elegibilidade sem que nenhum código a alterasse (defeito C1,
+     * {@code docs/ESTADO-DO-SISTEMA.md}).
+     *
+     * <p>A role {@code ADMIN} já foi verificada pelo
+     * {@code @PreAuthorize} do controlador <b>antes</b> deste método correr
+     * — carregar o alvo só acontece depois, para não construir um oráculo
+     * {@code 403}/{@code 404} (skill, §1).
+     *
+     * <p>Ordem: (1) carrega o estado atual — {@code 404} se o prestador não
+     * existir; (2) valida {@code reason} obrigatório para
+     * {@code REJECTED}/{@code SUSPENDED} — {@code 422} se faltar; (3) valida
+     * a transição contra a allowlist declarativa de
+     * {@link ProviderApprovalStatus#canTransitionTo} — {@code 409} com o
+     * estado atual no corpo se não for permitida; (4) escreve com
+     * <em>compare-and-set</em> ({@code WHERE approval_status = :esperado}) —
+     * zero linhas (corrida perdida para outra decisão concorrente) também
+     * dá {@code 409}; (5) audita na <b>mesma</b> transação, sem {@code reason}
+     * no metadata (é PII potencial — texto livre sobre uma pessoa).
+     */
+    @Transactional
+    ProviderApprovalDto decideApproval(UUID providerId, UUID adminUserId, ProviderApprovalDecision decision, String reason) {
+        ProviderApprovalRow current = repository.findApprovalState(providerId)
+                .orElseThrow(() -> Problems.notFound("Prestador não encontrado."));
+
+        boolean reasonRequired = decision == ProviderApprovalDecision.REJECTED || decision == ProviderApprovalDecision.SUSPENDED;
+        if (reasonRequired && (reason == null || reason.isBlank())) {
+            throw Problems.unprocessable("reason é obrigatório para a decisão " + decision + ".");
+        }
+
+        ProviderApprovalStatus currentStatus = ProviderApprovalStatus.valueOf(current.approvalStatus());
+        if (!currentStatus.canTransitionTo(decision)) {
+            throw Problems.conflict(
+                    "Transição não permitida: " + currentStatus + " → " + decision + " (estado atual: " + currentStatus + ").");
+        }
+
+        ProviderApprovalRow updated = repository.applyApprovalDecision(
+                        providerId, current.approvalStatus(), decision.targetStatus().name(), reason, adminUserId)
+                .orElseGet(() -> {
+                    // Perdeu a corrida: outra decisão concorrente já mudou approval_status
+                    // entre o passo (1) e o UPDATE. Relê para reportar o estado real, nunca
+                    // o que a chamada assumia (skill §3, "zero linhas → relê e devolve 409").
+                    String actual = repository.findApprovalState(providerId)
+                            .map(ProviderApprovalRow::approvalStatus)
+                            .orElse("desconhecido — prestador removido entretanto");
+                    throw Problems.conflict(
+                            "Transição não permitida: o estado mudou entretanto (estado atual: " + actual + ").");
+                });
+
+        auditLogWriter.record(
+                adminUserId,
+                "provider.approval.decided",
+                "provider_profile",
+                providerId,
+                AuditMetadata.builder()
+                        .put("from", current.approvalStatus())
+                        .put("to", updated.approvalStatus())
+                        .build());
+
+        return toApprovalDto(updated);
+    }
+
+    private static ProviderApprovalDto toApprovalDto(ProviderApprovalRow row) {
+        return new ProviderApprovalDto(
+                row.id(),
+                ProviderApprovalStatus.valueOf(row.approvalStatus()),
+                row.approvalReason(),
+                row.approvalDecidedBy(),
+                row.approvalDecidedAt());
     }
 
     // ---------------------------------------------------------------- mapeamento

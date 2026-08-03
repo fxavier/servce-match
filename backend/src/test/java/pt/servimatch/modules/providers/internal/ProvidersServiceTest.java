@@ -12,12 +12,16 @@ import pt.servimatch.modules.billing.SubscriptionLifecycle;
 import pt.servimatch.modules.billing.SubscriptionPlan;
 import pt.servimatch.modules.billing.SubscriptionStatus;
 import pt.servimatch.modules.categories.CategoriesApi;
+import pt.servimatch.modules.providers.ProviderApprovalDecision;
 import pt.servimatch.modules.providers.ProvidersApi;
+import pt.servimatch.modules.providers.internal.web.ProviderApprovalDto;
 import pt.servimatch.modules.providers.internal.web.ProviderProfileDto;
 import pt.servimatch.modules.providers.internal.web.UpdateProviderProfileRequest;
 import pt.servimatch.modules.uploads.UploadPurpose;
 import pt.servimatch.modules.uploads.UploadsApi;
 import pt.servimatch.modules.users.UsersApi;
+import pt.servimatch.platform.audit.AuditLogWriter;
+import pt.servimatch.platform.audit.AuditMetadata;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -56,15 +60,18 @@ class ProvidersServiceTest {
     private UploadsApi uploadsApi;
     @Mock
     private SubscriptionLifecycle subscriptionLifecycle;
+    @Mock
+    private AuditLogWriter auditLogWriter;
 
     private ProvidersService service;
 
     private final UUID providerId = UUID.randomUUID();
     private final UUID userId = UUID.randomUUID();
+    private final UUID adminUserId = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
-        service = new ProvidersService(repository, usersApi, categoriesApi, uploadsApi, subscriptionLifecycle);
+        service = new ProvidersService(repository, usersApi, categoriesApi, uploadsApi, subscriptionLifecycle, auditLogWriter);
     }
 
     private ProviderProfileRow approvedRow() {
@@ -240,6 +247,110 @@ class ProvidersServiceTest {
         verify(repository).replaceCategories(eq(providerId), eq(Set.of(categoryId)));
         verify(repository).replaceAdminRegionZones(eq(providerId), eq(Set.of("PT-LIS")));
         verify(repository).replacePortfolio(providerId, List.of(imageId));
+    }
+
+    // ---------------------------------------------------------------- PATCH /v1/admin/providers/{id}/approval (ADR-0011 D7)
+
+    private ProviderApprovalRow approvalRow(String status) {
+        return new ProviderApprovalRow(providerId, status, null, null, null);
+    }
+
+    @Test
+    void decideApprovalReturns404WhenProviderDoesNotExist() {
+        when(repository.findApprovalState(providerId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.decideApproval(providerId, adminUserId, ProviderApprovalDecision.APPROVED, null))
+                .isInstanceOfSatisfying(ErrorResponseException.class,
+                        ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+
+        verify(repository, never()).applyApprovalDecision(any(), any(), any(), any(), any());
+        verifyNoInteractions(auditLogWriter);
+    }
+
+    @Test
+    void decideApprovalRejectsMissingReasonForRejectedWith422AndWritesNothing() {
+        when(repository.findApprovalState(providerId)).thenReturn(Optional.of(approvalRow("PENDING")));
+
+        assertThatThrownBy(() -> service.decideApproval(providerId, adminUserId, ProviderApprovalDecision.REJECTED, "  "))
+                .isInstanceOfSatisfying(ErrorResponseException.class,
+                        ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY));
+
+        verify(repository, never()).applyApprovalDecision(any(), any(), any(), any(), any());
+        verifyNoInteractions(auditLogWriter);
+    }
+
+    @Test
+    void decideApprovalRejectsMissingReasonForSuspendedWith422() {
+        when(repository.findApprovalState(providerId)).thenReturn(Optional.of(approvalRow("APPROVED")));
+
+        assertThatThrownBy(() -> service.decideApproval(providerId, adminUserId, ProviderApprovalDecision.SUSPENDED, null))
+                .isInstanceOfSatisfying(ErrorResponseException.class,
+                        ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY));
+    }
+
+    @Test
+    void decideApprovalAllowsApprovedWithoutAnyReason() {
+        when(repository.findApprovalState(providerId)).thenReturn(Optional.of(approvalRow("PENDING")));
+        Instant decidedAt = Instant.now();
+        when(repository.applyApprovalDecision(providerId, "PENDING", "APPROVED", null, adminUserId))
+                .thenReturn(Optional.of(new ProviderApprovalRow(providerId, "APPROVED", null, adminUserId, decidedAt)));
+
+        ProviderApprovalDto dto = service.decideApproval(providerId, adminUserId, ProviderApprovalDecision.APPROVED, null);
+
+        assertThat(dto.approvalStatus().name()).isEqualTo("APPROVED");
+        assertThat(dto.decidedBy()).isEqualTo(adminUserId);
+        assertThat(dto.decidedAt()).isEqualTo(decidedAt);
+    }
+
+    @Test
+    void decideApprovalRejectsTransitionOutsideTheAllowlistWith409AndWritesNothing() {
+        when(repository.findApprovalState(providerId)).thenReturn(Optional.of(approvalRow("REJECTED")));
+
+        assertThatThrownBy(() -> service.decideApproval(providerId, adminUserId, ProviderApprovalDecision.APPROVED, null))
+                .isInstanceOfSatisfying(ErrorResponseException.class,
+                        ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+
+        verify(repository, never()).applyApprovalDecision(any(), any(), any(), any(), any());
+        verifyNoInteractions(auditLogWriter);
+    }
+
+    @Test
+    void decideApprovalRereadsAndReturns409WhenTheCompareAndSetLosesARace() {
+        when(repository.findApprovalState(providerId))
+                .thenReturn(Optional.of(approvalRow("PENDING")))
+                .thenReturn(Optional.of(approvalRow("REJECTED")));
+        when(repository.applyApprovalDecision(providerId, "PENDING", "APPROVED", null, adminUserId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.decideApproval(providerId, adminUserId, ProviderApprovalDecision.APPROVED, null))
+                .isInstanceOfSatisfying(ErrorResponseException.class,
+                        ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+
+        verifyNoInteractions(auditLogWriter);
+    }
+
+    @Test
+    void decideApprovalWritesAuditLogInTheSameCallWithActorAndTarget() {
+        // AuditMetadata (platform/audit, fora do âmbito deste agente) não expõe
+        // equals()/inspeção pública deliberadamente (só serialização interna do
+        // escritor) — por isso este teste verifica actor/action/target/alvo, os
+        // campos que a skill admin-moderation-endpoint exige na chamada, sem
+        // inspecionar o conteúdo de "metadata" por reflexão. O conteúdo
+        // {from, to} sem reason é garantido por leitura de código
+        // (ProvidersService#decideApproval) e pela suíte de auditoria do
+        // backend-platform.
+        when(repository.findApprovalState(providerId)).thenReturn(Optional.of(approvalRow("PENDING")));
+        when(repository.applyApprovalDecision(providerId, "PENDING", "REJECTED", "Documentos inválidos", adminUserId))
+                .thenReturn(Optional.of(new ProviderApprovalRow(providerId, "REJECTED", "Documentos inválidos", adminUserId, Instant.now())));
+
+        service.decideApproval(providerId, adminUserId, ProviderApprovalDecision.REJECTED, "Documentos inválidos");
+
+        verify(auditLogWriter).record(
+                eq(adminUserId),
+                eq("provider.approval.decided"),
+                eq("provider_profile"),
+                eq(providerId),
+                any(AuditMetadata.class));
     }
 
     // ---------------------------------------------------------------- APIs em lote

@@ -29,6 +29,10 @@ final class Problems {
         return of(HttpStatus.UNPROCESSABLE_ENTITY, ProblemType.VALIDATION, "Dados inválidos", detail);
     }
 
+    static ErrorResponseException conflict(String detail) {
+        return of(HttpStatus.CONFLICT, ProblemType.CONFLICT, "Conflito de estado", detail);
+    }
+
     private static ErrorResponseException of(HttpStatus status, String type, String title, String detail) {
         return new ErrorResponseException(status, ProblemDetailsSupport.of(status, type, title, detail), null);
     }
