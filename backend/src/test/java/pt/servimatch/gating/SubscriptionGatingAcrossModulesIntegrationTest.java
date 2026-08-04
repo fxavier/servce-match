@@ -40,31 +40,35 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <p><b>Correção (auditoria qa-e2e, onda "dados-reais"):</b> esta javadoc
  * afirmava que existe um listener {@code billing → providers} que escreve
  * {@code provider_profile.visibility_state} a partir de
- * {@code SubscriptionActivated}/{@code SubscriptionExpired}. <b>Esse
- * listener nunca existiu</b> — não há nenhum {@code @EventListener} para
- * esses eventos em {@code providers} (o único consumidor de
- * {@code SubscriptionActivated}/{@code SubscriptionExpired} é
- * {@code notifications.SubscriptionNotificationListener}, que só dispara
+ * {@code SubscriptionActivated}/{@code SubscriptionExpired}, coberto por
+ * {@code SubscriptionLifecycleStateMachineTest}. <b>Esse listener nunca
+ * existiu</b> — não há nenhum {@code @EventListener} para esses eventos em
+ * {@code providers} (o único consumidor de {@code
+ * SubscriptionActivated}/{@code SubscriptionExpired} é {@code
+ * notifications.SubscriptionNotificationListener}, que só dispara
  * notificações) e não há nenhum {@code UPDATE provider_profile ...
- * visibility_state} em produção. {@code ProvidersApi.checkEligibility} já
+ * visibility_state} em produção; {@code
+ * SubscriptionLifecycleStateMachineTest} testa a máquina de estados de
+ * {@code billing} isoladamente e não menciona {@code providers} nem
+ * {@code visibility_state}. {@code ProvidersApi.checkEligibility} já
  * documenta isto ("uma coluna sem nenhum escritor em produção — o defeito
- * que o ADR fecha", ADR-0011) e deixou de ler {@code visibility_state};
- * este teste continua a manipular {@code visibility_state} diretamente por
- * SQL (nos <em>helpers</em> {@code insertProvider}/{@code
- * activateSubscription}/{@code expireSubscription} abaixo) só para produzir
- * o mesmo resultado que {@code ProvidersApi.checkEligibility} calcularia a
- * partir de {@code SubscriptionLifecycle.isVisibilityEligible} — não porque
- * exista um listener a produzir esse estado. {@code proposals}/{@code chat}
- * (via {@code ProvidersApi.checkEligibility}) leem esse resultado
- * corretamente hoje; {@code matching}/{@code search} <b>não</b> — ver
+ * que o ADR fecha", ADR-0011) e deixou de ler {@code visibility_state}, tal
+ * como {@code matching.EligibilityRepository} e {@code
+ * search.ProviderSearchRepository} (ADR-0011 §D1, confirmado por
  * {@link ProviderVisibilityWithoutBillingListenerIntegrationTest}, que
- * prova (vermelho até correção do {@code backend-matching}) que
- * {@code GET /v1/search/providers} continua a filtrar por
- * {@code visibility_state} e por isso nunca lista nenhum prestador em
- * produção, subscrito ou não. O {@code search: público, não aparece} mais
- * abaixo neste teste "passa" mas não prova o comportamento de produção,
- * porque força {@code visibility_state='VISIBLE'} — algo que nunca acontece
- * fora deste teste.
+ * prova que {@code GET /v1/search/providers} lista um prestador aprovado e
+ * subscrito sem que nada tenha alguma vez escrito {@code
+ * visibility_state}). Por isso este teste, ao contrário de versões
+ * anteriores, <b>também deixou de escrever {@code visibility_state}</b> nos
+ * seus <em>helpers</em> {@code insertProvider}/{@code
+ * activateSubscription}/{@code expireSubscription}: fazê-lo já não tinha
+ * qualquer efeito sobre nenhum predicado de produção, e mantê-lo sugeria ao
+ * leitor uma dependência que não existe. O que este teste prova de facto —
+ * e continua a provar — é que {@code approval_status='APPROVED'} mais o
+ * estado real de {@code subscription} (nunca {@code visibility_state})
+ * bloqueiam/destravam {@code search}, {@code providers} (inbox), {@code
+ * proposals} e {@code chat} em conjunto, a partir da mesma transição de
+ * {@code subscription.status}.
  *
  * <p>Tokens sintéticos (skill {@code testcontainers-integration-test}:
  * "mock para a combinatória") — a cadeia de autenticação real já está
@@ -297,17 +301,32 @@ class SubscriptionGatingAcrossModulesIntegrationTest {
         return id;
     }
 
-    /** Aprovado sempre; visível/subscrito só se {@code subscribed}. Categoria e cobertura de raio já atribuídas. */
+    /**
+     * Aprovado sempre; subscrito só se {@code subscribed} (nunca escreve
+     * {@code visibility_state} — ver javadoc da classe). Categoria e
+     * cobertura de raio já atribuídas.
+     *
+     * <p>{@code approval_status='APPROVED'} por {@code INSERT} direto é um
+     * atalho de setup (ADR-0011 D9) — a transição real
+     * ({@code PENDING → APPROVED} via {@code PATCH
+     * /v1/admin/providers/{id}/approval}) tem o seu teste próprio em
+     * {@code pt.servimatch.modules.providers.ProviderApprovalIntegrationTest}
+     * e, atravessando pesquisa/inbox, em
+     * {@link ProviderApprovalUnlocksSearchAndMatchingIntegrationTest}.
+     * {@code approval_decided_by}/{@code approval_decided_at} só satisfazem
+     * aqui o {@code CHECK chk_provider_profile_approval_decision_coherence}
+     * (V22); reutiliza-se o {@code userId} do próprio prestador como autor
+     * fictício.
+     */
     private UUID insertProvider(UUID categoryId, boolean subscribed) {
         UUID userId = insertUser("kc-gating-prov-" + UUID.randomUUID());
         UUID providerId = UUID.randomUUID();
         jdbcClient.sql("""
-                        INSERT INTO provider_profile (id, user_id, approval_status, visibility_state)
-                        VALUES (:id, :userId, 'APPROVED', :visibility)
+                        INSERT INTO provider_profile (id, user_id, approval_status, approval_decided_by, approval_decided_at)
+                        VALUES (:id, :userId, 'APPROVED', :userId, now())
                         """)
                 .param("id", providerId)
                 .param("userId", userId)
-                .param("visibility", subscribed ? "VISIBLE" : "HIDDEN")
                 .update();
         jdbcClient.sql("INSERT INTO provider_category (provider_id, category_id) VALUES (:p, :c)")
                 .param("p", providerId)
@@ -326,9 +345,6 @@ class SubscriptionGatingAcrossModulesIntegrationTest {
     }
 
     private void activateSubscription(UUID providerId) {
-        jdbcClient.sql("UPDATE provider_profile SET visibility_state = 'VISIBLE' WHERE id = :p")
-                .param("p", providerId)
-                .update();
         boolean hasSubscription = jdbcClient.sql("SELECT count(*) FROM subscription WHERE provider_id = :p")
                 .param("p", providerId).query(Integer.class).single() > 0;
         if (hasSubscription) {
@@ -349,9 +365,6 @@ class SubscriptionGatingAcrossModulesIntegrationTest {
     }
 
     private void expireSubscription(UUID providerId) {
-        jdbcClient.sql("UPDATE provider_profile SET visibility_state = 'HIDDEN' WHERE id = :p")
-                .param("p", providerId)
-                .update();
         jdbcClient.sql("UPDATE subscription SET status = 'EXPIRED' WHERE provider_id = :p")
                 .param("p", providerId)
                 .update();

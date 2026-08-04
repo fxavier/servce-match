@@ -213,8 +213,11 @@ class AcceptProposalIntegrationTest {
      * atalho de setup — a transição real ({@code PENDING → APPROVED} via
      * {@code PATCH /v1/admin/providers/{id}/approval}) é responsabilidade de
      * {@code modules/providers} (defeito C1, docs/ESTADO-DO-SISTEMA.md), com
-     * o seu próprio teste de transição nesse módulo. {@code
-     * approval_decided_by}/{@code approval_decided_at} só satisfazem aqui o
+     * o seu próprio teste de transição em
+     * {@code pt.servimatch.modules.providers.ProviderApprovalIntegrationTest}
+     * — e, atravessando pesquisa/inbox, em
+     * {@code pt.servimatch.gating.ProviderApprovalUnlocksSearchAndMatchingIntegrationTest}.
+     * {@code approval_decided_by}/{@code approval_decided_at} só satisfazem aqui o
      * {@code CHECK chk_provider_profile_approval_decision_coherence} (V22);
      * reutiliza-se o {@code userId} do próprio prestador como autor fictício.
      */

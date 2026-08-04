@@ -337,12 +337,27 @@ class OpenApiContractComplianceTest {
         return id;
     }
 
+    /**
+     * {@code approval_status='APPROVED'} por {@code INSERT} direto é um
+     * atalho de setup (ADR-0011 D9) — a transição real
+     * ({@code PENDING → APPROVED} via {@code PATCH
+     * /v1/admin/providers/{id}/approval}) tem o seu teste próprio em
+     * {@code pt.servimatch.modules.providers.ProviderApprovalIntegrationTest}
+     * e, atravessando pesquisa/inbox, em
+     * {@code pt.servimatch.gating.ProviderApprovalUnlocksSearchAndMatchingIntegrationTest}.
+     * {@code approval_decided_by}/{@code approval_decided_at} só satisfazem
+     * aqui o {@code CHECK chk_provider_profile_approval_decision_coherence}
+     * (V22); reutiliza-se o {@code userId} do próprio prestador como autor
+     * fictício.
+     */
     private UUID insertEligibleProvider(String keycloakSub, UUID categoryId) {
         UUID userId = insertUser(keycloakSub);
         UUID providerId = UUID.randomUUID();
         jdbcClient.sql("""
-                        INSERT INTO provider_profile (id, user_id, approval_status, visibility_state, headline)
-                        VALUES (:id, :userId, 'APPROVED', 'VISIBLE', 'Canalizador certificado')
+                        INSERT INTO provider_profile (
+                            id, user_id, approval_status, approval_decided_by, approval_decided_at, visibility_state, headline
+                        )
+                        VALUES (:id, :userId, 'APPROVED', :userId, now(), 'VISIBLE', 'Canalizador certificado')
                         """)
                 .param("id", providerId)
                 .param("userId", userId)
@@ -362,11 +377,18 @@ class OpenApiContractComplianceTest {
         return providerId;
     }
 
+    /**
+     * {@code approval_status='APPROVED'} por {@code INSERT} direto — mesmo
+     * atalho de setup de {@link #insertEligibleProvider}, com o mesmo teste
+     * de transição nomeado aí.
+     */
     private void insertUnsubscribedProvider(String keycloakSub) {
         UUID userId = insertUser(keycloakSub);
         jdbcClient.sql("""
-                        INSERT INTO provider_profile (id, user_id, approval_status, visibility_state)
-                        VALUES (:id, :userId, 'APPROVED', 'HIDDEN')
+                        INSERT INTO provider_profile (
+                            id, user_id, approval_status, approval_decided_by, approval_decided_at, visibility_state
+                        )
+                        VALUES (:id, :userId, 'APPROVED', :userId, now(), 'HIDDEN')
                         """)
                 .param("id", UUID.randomUUID())
                 .param("userId", userId)

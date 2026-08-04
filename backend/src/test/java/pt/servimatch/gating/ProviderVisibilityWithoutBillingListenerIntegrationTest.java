@@ -115,7 +115,22 @@ class ProviderVisibilityWithoutBillingListenerIntegrationTest {
         return id;
     }
 
-    /** Aprovado, com categoria e cobertura por raio — nunca toca em {@code visibility_state}. */
+    /**
+     * Aprovado, com categoria e cobertura por raio — nunca toca em
+     * {@code visibility_state}.
+     *
+     * <p>{@code approval_status='APPROVED'} por {@code INSERT} direto é um
+     * atalho de setup (ADR-0011 D9) — a transição real
+     * ({@code PENDING → APPROVED} via {@code PATCH
+     * /v1/admin/providers/{id}/approval}) tem o seu teste próprio em
+     * {@code pt.servimatch.modules.providers.ProviderApprovalIntegrationTest}
+     * e, atravessando pesquisa/inbox, em
+     * {@code pt.servimatch.gating.ProviderApprovalUnlocksSearchAndMatchingIntegrationTest}.
+     * {@code approval_decided_by}/{@code approval_decided_at} só satisfazem
+     * aqui o {@code CHECK chk_provider_profile_approval_decision_coherence}
+     * (V22); reutiliza-se o {@code userId} do próprio prestador como autor
+     * fictício.
+     */
     private UUID insertApprovedProviderCoveringLisbon(UUID categoryId) {
         UUID userId = UUID.randomUUID();
         UUID providerId = UUID.randomUUID();
@@ -131,8 +146,8 @@ class ProviderVisibilityWithoutBillingListenerIntegrationTest {
         // Deliberadamente SEM a coluna visibility_state no INSERT: fica no
         // valor por omissão da migração V4 ('HIDDEN'), tal como em produção.
         jdbcClient.sql("""
-                        INSERT INTO provider_profile (id, user_id, approval_status)
-                        VALUES (:id, :userId, 'APPROVED')
+                        INSERT INTO provider_profile (id, user_id, approval_status, approval_decided_by, approval_decided_at)
+                        VALUES (:id, :userId, 'APPROVED', :userId, now())
                         """)
                 .param("id", providerId)
                 .param("userId", userId)

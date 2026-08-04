@@ -267,6 +267,22 @@ class MatchingEligibilityTest {
      *                                    casos de fronteira do grace period de {@code PAST_DUE}
      *                                    (ADR-0011 §D5); nunca vem de entrada externa, só de
      *                                    literais fixos definidos neste teste.
+     *
+     *                                    <p>{@code approval_status='APPROVED'} por {@code INSERT}
+     *                                    direto (quando {@code approvalStatus} não é {@code PENDING})
+     *                                    é um atalho de setup (ADR-0011 D9) — a transição real
+     *                                    ({@code PENDING → APPROVED} via {@code PATCH
+     *                                    /v1/admin/providers/{id}/approval}) tem o seu teste próprio
+     *                                    em {@code
+     *                                    pt.servimatch.modules.providers.ProviderApprovalIntegrationTest}
+     *                                    e, atravessando pesquisa/inbox, em {@code
+     *                                    pt.servimatch.gating.ProviderApprovalUnlocksSearchAndMatchingIntegrationTest}.
+     *                                    {@code approval_decided_by}/{@code approval_decided_at} só
+     *                                    satisfazem aqui o {@code CHECK
+     *                                    chk_provider_profile_approval_decision_coherence} (V22) para
+     *                                    os casos {@code APPROVED}; ficam {@code NULL} para
+     *                                    {@code PENDING} (nunca houve decisão) — reutiliza-se o
+     *                                    próprio {@code userId} do prestador como autor fictício.
      */
     private static UUID seedProvider(
             UUID planId,
@@ -284,9 +300,15 @@ class MatchingEligibilityTest {
                 .update();
         // Sem visibility_state (ADR-0011 §D1): a coluna deixou de ser lida
         // pelo predicado de produção, e este teste não a fabrica.
+        // approval_decided_by/at ficam NULL para PENDING (nunca houve
+        // decisão) e preenchidos nos restantes casos, só para satisfazer o
+        // CHECK chk_provider_profile_approval_decision_coherence (V22) — sem
+        // passar null diretamente ao driver, que exige tipo explícito.
         JDBC.sql("""
-                INSERT INTO provider_profile (id, user_id, headline, approval_status)
-                VALUES (:id, :userId, :headline, :approval)
+                INSERT INTO provider_profile (id, user_id, headline, approval_status, approval_decided_by, approval_decided_at)
+                VALUES (:id, :userId, :headline, :approval,
+                        CASE WHEN :approval = 'PENDING' THEN NULL ELSE :userId END,
+                        CASE WHEN :approval = 'PENDING' THEN NULL ELSE now() END)
                 """)
                 .param("id", providerId)
                 .param("userId", userId)
@@ -337,9 +359,13 @@ class MatchingEligibilityTest {
                 FROM generate_series(1, :count) gs
                 """).param("categoryId", CATEGORY_ID).param("count", count).update();
 
+        // Todos APPROVED (fins de volume/plano, não de asserção funcional —
+        // ver javadoc da classe): approval_decided_by/at preenchidos só para
+        // satisfazer o CHECK chk_provider_profile_approval_decision_coherence
+        // (V22), mesmo atalho de setup de seedProvider acima.
         JDBC.sql("""
-                INSERT INTO provider_profile (id, user_id, headline, approval_status, rating_avg, rating_count)
-                SELECT gen_random_uuid(), u.id, 'Bulk provider', 'APPROVED',
+                INSERT INTO provider_profile (id, user_id, headline, approval_status, approval_decided_by, approval_decided_at, rating_avg, rating_count)
+                SELECT gen_random_uuid(), u.id, 'Bulk provider', 'APPROVED', u.id, now(),
                        (random() * 5)::numeric(3,2), (random() * 200)::int
                 FROM users u WHERE u.keycloak_sub LIKE 'it-bulk-' || :categoryId || '-%'
                 """).param("categoryId", CATEGORY_ID).update();
