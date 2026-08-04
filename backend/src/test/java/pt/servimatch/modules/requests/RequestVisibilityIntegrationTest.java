@@ -241,8 +241,11 @@ class RequestVisibilityIntegrationTest {
      * ({@code PENDING → APPROVED} pelo endpoint {@code PATCH
      * /v1/admin/providers/{id}/approval}) é responsabilidade de
      * {@code modules/providers} (defeito C1, docs/ESTADO-DO-SISTEMA.md) e
-     * tem o seu próprio teste de transição nesse módulo. {@code
-     * approval_decided_by}/{@code approval_decided_at} são preenchidos aqui
+     * tem o seu próprio teste de transição em
+     * {@code pt.servimatch.modules.providers.ProviderApprovalIntegrationTest}
+     * — e, atravessando pesquisa/inbox, em
+     * {@code pt.servimatch.gating.ProviderApprovalUnlocksSearchAndMatchingIntegrationTest}.
+     * {@code approval_decided_by}/{@code approval_decided_at} são preenchidos aqui
      * só para satisfazer o {@code CHECK
      * chk_provider_profile_approval_decision_coherence} (V22) — reutiliza-se
      * o próprio {@code userId} do prestador como autor fictício da decisão,

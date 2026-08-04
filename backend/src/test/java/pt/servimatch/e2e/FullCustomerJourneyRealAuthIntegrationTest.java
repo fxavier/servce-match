@@ -225,7 +225,22 @@ class FullCustomerJourneyRealAuthIntegrationTest {
         return id;
     }
 
-    /** Prestador aprovado, visível, com subscrição ativa, categoria e cobertura de raio sobre Lisboa. */
+    /**
+     * Prestador aprovado, visível, com subscrição ativa, categoria e
+     * cobertura de raio sobre Lisboa.
+     *
+     * <p>{@code approval_status='APPROVED'} por {@code INSERT} direto é um
+     * atalho de setup (ADR-0011 D9) — a transição real
+     * ({@code PENDING → APPROVED} via {@code PATCH
+     * /v1/admin/providers/{id}/approval}) tem o seu teste próprio em
+     * {@code pt.servimatch.modules.providers.ProviderApprovalIntegrationTest}
+     * e, atravessando pesquisa/inbox, em
+     * {@code pt.servimatch.gating.ProviderApprovalUnlocksSearchAndMatchingIntegrationTest}.
+     * {@code approval_decided_by}/{@code approval_decided_at} só satisfazem
+     * aqui o {@code CHECK chk_provider_profile_approval_decision_coherence}
+     * (V22); reutiliza-se o próprio {@code userId} do prestador como autor
+     * fictício.
+     */
     private UUID seedEligibleProvider(String keycloakSub, UUID categoryId) {
         UUID userId = UUID.randomUUID();
         jdbcClient.sql("""
@@ -241,8 +256,8 @@ class FullCustomerJourneyRealAuthIntegrationTest {
 
         UUID providerId = UUID.randomUUID();
         jdbcClient.sql("""
-                        INSERT INTO provider_profile (id, user_id, approval_status, visibility_state)
-                        VALUES (:id, :userId, 'APPROVED', 'VISIBLE')
+                        INSERT INTO provider_profile (id, user_id, approval_status, approval_decided_by, approval_decided_at, visibility_state)
+                        VALUES (:id, :userId, 'APPROVED', :userId, now(), 'VISIBLE')
                         """)
                 .param("id", providerId)
                 .param("userId", userId)

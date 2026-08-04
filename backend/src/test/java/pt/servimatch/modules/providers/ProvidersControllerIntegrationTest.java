@@ -184,13 +184,31 @@ class ProvidersControllerIntegrationTest {
         return id;
     }
 
-    /** Prestador com {@code approvalStatus} indicado e, opcionalmente, uma subscrição ACTIVE dentro do período. */
+    /**
+     * Prestador com {@code approvalStatus} indicado e, opcionalmente, uma
+     * subscrição ACTIVE dentro do período.
+     *
+     * <p>{@code approval_status='APPROVED'} por {@code INSERT} direto é um
+     * atalho de setup (ADR-0011 D9) — a transição real
+     * ({@code PENDING → APPROVED} via {@code PATCH
+     * /v1/admin/providers/{id}/approval}) tem o seu teste próprio em
+     * {@link ProviderApprovalIntegrationTest} e, atravessando pesquisa/inbox,
+     * em
+     * {@code pt.servimatch.gating.ProviderApprovalUnlocksSearchAndMatchingIntegrationTest}.
+     * {@code approval_decided_by}/{@code approval_decided_at} ficam
+     * {@code NULL} para {@code PENDING} (nunca houve decisão) e preenchidos
+     * nos restantes casos só para satisfazer o {@code CHECK
+     * chk_provider_profile_approval_decision_coherence} (V22); reutiliza-se
+     * o próprio {@code userId} do prestador como autor fictício.
+     */
     private UUID insertProvider(String approvalStatus, boolean withActiveSubscription) {
         UUID userId = insertUser("kc-provider-" + UUID.randomUUID());
         UUID providerId = UUID.randomUUID();
         jdbcClient.sql("""
-                        INSERT INTO provider_profile (id, user_id, approval_status)
-                        VALUES (:id, :userId, :approvalStatus)
+                        INSERT INTO provider_profile (id, user_id, approval_status, approval_decided_by, approval_decided_at)
+                        VALUES (:id, :userId, :approvalStatus,
+                                CASE WHEN :approvalStatus = 'PENDING' THEN NULL ELSE :userId END,
+                                CASE WHEN :approvalStatus = 'PENDING' THEN NULL ELSE now() END)
                         """)
                 .param("id", providerId)
                 .param("userId", userId)
