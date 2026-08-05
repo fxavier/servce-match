@@ -12,6 +12,7 @@ import pt.servimatch.modules.categories.CategoriesApi;
 import pt.servimatch.modules.matching.MatchingApi;
 import pt.servimatch.modules.providers.ProvidersApi;
 import pt.servimatch.modules.requests.RequestPublished;
+import pt.servimatch.modules.requests.UrgencyLevel;
 import pt.servimatch.modules.uploads.ImageRef;
 import pt.servimatch.modules.uploads.UploadPurpose;
 import pt.servimatch.modules.uploads.UploadsApi;
@@ -120,7 +121,7 @@ class RequestsServiceTest {
         CreateServiceRequestRequest request = new CreateServiceRequestRequest(
                 categoryId, "Fuga de água na cozinha", null,
                 new AddressDto("Rua Teste", null, "1000-001", "Lisboa", "1106", "PT", null),
-                "NORMAL", null, null);
+                UrgencyLevel.NORMAL, null, null);
 
         assertThatThrownBy(() -> service.createDraft(ownerId, request))
                 .isInstanceOfSatisfying(ErrorResponseException.class,
@@ -146,7 +147,7 @@ class RequestsServiceTest {
         CreateServiceRequestRequest request = new CreateServiceRequestRequest(
                 categoryId, "Fuga de água na cozinha", null,
                 new AddressDto("Rua Teste", null, "1000-001", "Lisboa", "1106", "PT", null),
-                "NORMAL", null, List.of(imageA, imageB));
+                UrgencyLevel.NORMAL, null, List.of(imageA, imageB));
 
         service.createDraft(ownerId, request);
 
@@ -179,7 +180,7 @@ class RequestsServiceTest {
         CreateServiceRequestRequest request = new CreateServiceRequestRequest(
                 categoryId, "Fuga de água na cozinha", null,
                 new AddressDto("Rua Teste", null, "1000-001", "Lisboa", "1106", "PT", null),
-                "NORMAL", null, List.of(imageA, imageB));
+                UrgencyLevel.NORMAL, null, List.of(imageA, imageB));
 
         ServiceRequestDto dto = service.createDraft(ownerId, request);
 
