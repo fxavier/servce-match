@@ -264,6 +264,96 @@ por IP/username no próprio endpoint de login, antes de chamar o Keycloak) —
 utilizador do Keycloak (`failureFactor`) continua válido como segunda linha,
 já que esse é contado pelo `username` tentado, não pelo IP.
 
+### Rate limiting por IP real: `RATE_LIMIT_TRUSTED_PROXIES` (achado M4)
+
+O `RateLimitFilter` do backend (`servimatch.rate-limit.capacity`, 120
+pedidos/minuto por omissão) identifica o cliente pelo IP. Numa ligação
+direta isso é o IP do browser; atrás do BFF, **a ligação TCP que chega ao
+backend é sempre a do BFF**, nunca a do utilizador final — o
+`getRemoteAddr()` da Servlet API não sabe nada do que está antes do BFF.
+
+Sem mais nada, isto faz todo o tráfego web passar a partilhar **um único
+balde** (o do IP do BFF): 120 pedidos/minuto para toda a base de utilizadores
+web em vez de 120 por utilizador. Não é escalada de privilégio, é
+*auto-DoS* — um visitante a navegar depressa devolve `429` a todos os
+outros, e a proteção anti-abuso por IP deixa de existir para o web.
+
+A correção tem **duas metades**, em dois repositórios/âmbitos diferentes, e
+só funciona com as duas juntas:
+
+1. **BFF (`web/bff`, agente `web-bff`)**: reencaminha `X-Forwarded-For` com o
+   IP real do utilizador final ao chamar o backend em `/api/**` → `/v1/**`.
+2. **Backend (`backend`, agente `backend-platform`)**: só honra
+   `X-Forwarded-For` quando a ligação TCP vem de um endereço listado em
+   `servimatch.rate-limit.trusted-proxies` (env `RATE_LIMIT_TRUSTED_PROXIES`
+   em `backend/.env.example`). **Vazio por omissão** — sem esta lista
+   preenchida, o backend ignora sempre o cabeçalho e usa o IP da ligação TCP
+   (o do BFF), mesmo que o BFF já esteja a enviá-lo corretamente.
+
+Não há estado intermédio perigoso: sem a lista de proxies confiáveis
+preenchida, o backend ignora o cabeçalho (comportamento anterior, apenas
+"balde único partilhado", nunca pior); sem o BFF a enviar o cabeçalho, não
+há nada para o backend confiar. As duas metades podem aterrar em qualquer
+ordem — nenhuma delas, sozinha, reabre o defeito original (aceitar
+`X-Forwarded-For` de qualquer origem), porque a lista continua vazia por
+omissão em ambas até ser preenchida deliberadamente.
+
+**Valor local** (documentado em `.env.example` da raiz, a copiar para
+`backend/.env.example`/`.env` — este ficheiro de compose não containeriza
+nem o backend nem o BFF, por isso nenhum dos dois lê `RATE_LIMIT_TRUSTED_PROXIES`
+daqui diretamente):
+
+```
+RATE_LIMIT_TRUSTED_PROXIES=127.0.0.1/32,::1/128
+```
+
+Em desenvolvimento local, backend e BFF correm ambos como processos no
+host, cada um a chamar o outro por `localhost`. Confirmado empiricamente
+nesta máquina (Node 24, `fetch('http://localhost:<porta>')`) que a ligação
+resolve para `127.0.0.1`; `::1/128` fica incluído porque a ordem de
+resolução IPv4/IPv6 de `localhost` depende do SO e do `getaddrinfo`, não é
+garantida entre máquinas. Um endereço de *loopback* explícito não é uma
+gama larga — é o mais estreito possível para "o próprio processo desta
+máquina", por isso não reabre o bypass.
+
+**O ponto que decide se isto fica seguro ou perigoso:** a lista tem de ficar
+o mais **estreita** possível — o endereço ou a rede exata do BFF, nunca
+`0.0.0.0/0` nem uma gama larga "para funcionar". Quem estiver dentro dessa
+gama pode forjar `X-Forwarded-For` e escolher a chave de balde de outro
+utilizador — é exatamente o defeito que motivou esta variável: antes desta
+correção, o cabeçalho era aceite de qualquer origem, e 200 pedidos com um
+`X-Forwarded-For` rotativo passavam todos com `200`, zero `429` (o
+*rate limiting* por IP não existia de facto).
+
+**O que muda num deployment real** (staging/produção, onde a rede é
+diferente da deste compose):
+
+- O backend e o BFF já não partilham o mesmo host — `trusted-proxies` deixa
+  de ser um *loopback* e passa a ser o IP/CIDR real do BFF **nessa rede**
+  (ex.: o IP interno do container/pod do BFF, ou o `/32` de um NAT gateway
+  dedicado do seu subnet privado) — nunca a gama inteira da VPC/subnet só
+  porque "lá está o BFF".
+- Se houver **mais um proxy à frente do BFF** (load balancer, CDN, API
+  gateway), isso é um problema *diferente e anterior* a este: é o
+  `TRUST_PROXY_HOPS` do próprio BFF (`web/bff/.env.example`, ADR-0012 D7)
+  que tem de contar exatamente esse(s) salto(s) para o BFF calcular o IP
+  real do utilizador a partir do `X-Forwarded-For` que ele próprio recebe,
+  **antes** de o reencaminhar ao backend. Confundir os dois contadores é a
+  forma mais fácil de isto partir em produção: `RATE_LIMIT_TRUSTED_PROXIES`
+  é "em que ligação o backend confia", `TRUST_PROXY_HOPS` é "quantos saltos
+  de proxy o BFF já atravessou antes de ver o pedido" — são conceptualmente
+  independentes, mas os dois têm de estar corretos para o IP que chega ao
+  backend ser mesmo o do utilizador final.
+- Nunca copiar o valor de desenvolvimento (`127.0.0.1/32,::1/128`) para um
+  ambiente real — é *loopback*, só faz sentido quando os dois processos
+  partilham o host.
+
+Ver também ADR-0012 (secção D7) e `CLAUDE.md` §4 para o enquadramento
+completo (proteção por força bruta do Keycloak vê sempre o IP do BFF, nunca
+o do utilizador final — outra consequência da mesma topologia, mitigada do
+lado do BFF por *rate limiting* dedicado em `/auth/**`, não por esta
+variável).
+
 ### Consola de administração do Keycloak
 
 `http://localhost:8081/admin/` — utilizador `admin` / password `admin`

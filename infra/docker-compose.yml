@@ -90,6 +90,20 @@ services:
       start_period: 30s
     networks: [servimatch-net]
 
+  # Nota sobre RATE_LIMIT_TRUSTED_PROXIES (achado de auditoria M4, ADR-0012
+  # D7): nem o backend nem o BFF (web/bff) correm como serviço deste
+  # docker-compose.yml — ambos são processos no host durante o
+  # desenvolvimento local, cada um com o seu próprio .env
+  # (backend/.env.example, web/bff/.env.example). Por isso esta variável não
+  # aparece como `environment:` de nenhum serviço abaixo; fica documentada em
+  # `.env.example` (raiz) e `infra/README.md` como o ponto de coordenação
+  # entre as duas metades da correção: o backend só honra X-Forwarded-For
+  # vindo de um IP/CIDR explicitamente listado ali, e é o BFF quem envia esse
+  # cabeçalho com o IP real do utilizador. Falta uma metade e a outra não
+  # produz efeito nenhum. Valor local (loopback, os dois processos no mesmo
+  # host): `127.0.0.1/32,::1/128` — nunca alargar isto para "funcionar", é o
+  # que reabriria o bypass do achado original (X-Forwarded-For forjável por
+  # qualquer origem dentro da gama confiada).
   redis:
     image: redis:8.8.1-alpine
     container_name: servimatch-redis
