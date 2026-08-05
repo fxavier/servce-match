@@ -65,11 +65,13 @@ export interface Config {
   /**
    * Normalização de tempo de resposta do REGISTO (ADR-0012 D7.3/D7.4), pelo
    * mesmo mecanismo do login (`withNormalizedTiming`), mas com piso próprio:
-   * o caminho de email novo pode fazer até 4 chamadas à Admin REST API
-   * (criar utilizador, listar roles disponíveis, atribuir role, login) —
-   * naturalmente mais lento do que o caminho de email já existente (que,
-   * hoje, faz quando muito uma tentativa de login). Sem um piso dimensionado
-   * para o caminho mais pesado, a diferença de número de chamadas seria, ela
+   * o caminho de email novo pode fazer até 3 chamadas à Admin REST API
+   * (criar utilizador, listar roles disponíveis, atribuir role) — mais
+   * lento do que o caminho de email já existente (que não chama o Keycloak
+   * de todo; só regista a tentativa na quota do login). `/auth/register`
+   * nunca autentica nem estabelece sessão em nenhum dos dois casos — ver
+   * `RegisterCoreResult` em `routes/auth.ts`. Sem um piso dimensionado para
+   * o caminho mais pesado, a diferença de número de chamadas seria, ela
    * própria, um oráculo de tempo entre "email novo" e "email já registado".
    */
   registerTiming: {

@@ -14,8 +14,21 @@ export interface ProxyDeps {
 
 // Cabeçalhos do pedido do browser que fazem sentido reencaminhar ao backend.
 // Nunca reencaminhamos `cookie` (é a sessão do BFF, não do backend) nem
-// `host`/`connection` (específicos deste salto).
+// `host`/`connection` (específicos deste salto), e NUNCA `x-forwarded-for`
+// do próprio pedido — ver `resolveClientIp` mais abaixo: esse cabeçalho é
+// sempre CALCULADO pelo BFF, nunca copiado do cliente.
 const FORWARD_REQUEST_HEADERS = ['content-type', 'idempotency-key', 'accept', 'accept-language'];
+
+/**
+ * IP do pedido tal como o BFF o calcula — Express já aplica `trust proxy`
+ * (`config.trustProxyHops`, número explícito de saltos) a `req.ip`, por
+ * isso este É o IP correto mesmo atrás de um proxy reverso confiável (M4,
+ * auditoria Onda C). NUNCA usar um `X-Forwarded-For` vindo do pedido do
+ * cliente diretamente — só o BFF decide o que reencaminha.
+ */
+function resolveClientIp(req: Request): string | undefined {
+  return req.ip ?? req.socket.remoteAddress ?? undefined;
+}
 
 declare module 'express-serve-static-core' {
   interface Request {
@@ -159,6 +172,25 @@ export function createApiProxyRouter(deps: ProxyDeps): Router {
     // servir este endpoint sem token (é o mesmo `security: []`).
     if (session) {
       headers.set('Authorization', `Bearer ${session.accessToken}`);
+    }
+
+    // M4 (auditoria Onda C): sem isto, `getRemoteAddr()` no backend via
+    // `X-Forwarded-For` é sempre o IP do BFF para TODO o tráfego da SPA —
+    // o balde de `servimatch.rate-limit.capacity` (120/min) passa a ser
+    // partilhado por toda a base de utilizadores web (auto-DoS: um
+    // visitante rápido devolve 429 a todos os outros), e a proteção
+    // anti-abuso por IP deixa de existir para o web. `SET`, nunca `append`
+    // nem concatenação de um valor vindo do pedido — SOBRESCREVE qualquer
+    // `X-Forwarded-For` que o cliente tenha tentado enviar (não está em
+    // `FORWARD_REQUEST_HEADERS`, por isso nunca chegaria aqui de qualquer
+    // forma, mas o `set` explícito é a garantia definitiva: só o valor que
+    // o BFF calculou, nunca o que o cliente controla). O backend só honra
+    // este cabeçalho a partir de `servimatch.rate-limit.trusted-proxies`
+    // (CIDR do BFF) — sem essa configuração (a outra metade, do
+    // `platform-infra`), este valor é ignorado, sem efeito nenhum.
+    const clientIp = resolveClientIp(req);
+    if (clientIp) {
+      headers.set('X-Forwarded-For', clientIp);
     }
 
     const hasBody = !['GET', 'HEAD'].includes(req.method) && Buffer.isBuffer(req.body) && req.body.length > 0;

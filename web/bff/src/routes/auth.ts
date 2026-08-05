@@ -137,15 +137,26 @@ export function createAuthRouter({
 
   /**
    * Resultado interno do núcleo de registo — normalizado em tempo por
-   * `withNormalizedTiming` ANTES de se traduzir em resposta HTTP. Só há dois
-   * resultados possíveis, e a resposta HTTP construída a partir de qualquer
-   * um deles é LITERALMENTE idêntica (201, corpo `{ registered: true }`):
-   * é o que fecha o oráculo de enumeração de C3.1
-   * (docs/ESTADO-DO-SISTEMA.md) — status, corpo e tempo iguais. `kind`
-   * decide apenas se o cookie de sessão é definido, nunca o que vai no
-   * corpo — ver o comentário junto à construção da resposta, mais abaixo.
+   * `withNormalizedTiming` ANTES de se traduzir em resposta HTTP, e usado
+   * SÓ para telemetria/log interno. A resposta HTTP construída a partir de
+   * qualquer um destes resultados é LITERALMENTE idêntica em status, corpo
+   * **e cabeçalhos** (201, `{ registered: true }`, sem `Set-Cookie`): é o
+   * que fecha o oráculo de enumeração de M2 (auditoria da Onda C).
+   *
+   * `/auth/register` NUNCA estabelece sessão do browser — nem para email
+   * novo, nem para email já existente. A correção anterior (fechar C3.1)
+   * normalizou status, corpo e tempo, mas deixou o `Set-Cookie: sm_sid`
+   * como oráculo residual: email novo autenticava sempre com a password que
+   * o próprio requerente definiu, email já existente falhava quase sempre
+   * com a password que o requerente arriscou — um cliente HTTP de primeira
+   * parte (não sujeito à regra de "forbidden response header" do browser)
+   * lê esse cabeçalho em bruto. Registo cria a conta e, quando aplicável,
+   * atribui a role; autenticar é sempre um pedido SEPARADO a `POST
+   * /auth/login`, que já é indistinguível por desenho e tem o seu próprio
+   * limitador — a SPA encadeia os dois pedidos com as credenciais que o
+   * utilizador acabou de submeter.
    */
-  type RegisterCoreResult = { kind: 'session'; session: SessionRecord } | { kind: 'no-session' };
+  type RegisterCoreResult = { kind: 'created'; userId: string } | { kind: 'conflict' };
 
   /**
    * Marca uma falha de infraestrutura (criação ou atribuição de role) já
@@ -181,9 +192,11 @@ export function createAuthRouter({
   /**
    * Núcleo do registo — chamado sempre dentro de `withNormalizedTiming`.
    * Email novo e email já registado passam pela MESMA função e produzem o
-   * MESMO formato de resultado; a diferença de trabalho interno (criar
-   * utilizador + atribuir role vs. só tentar autenticar) é exatamente o que
-   * a normalização de tempo em `registerCore`'s chamador esconde.
+   * MESMO formato de resultado (usado só para log interno); a diferença de
+   * trabalho real (criar utilizador + atribuir role vs. só registar a
+   * tentativa na quota do login) é exatamente o que a normalização de tempo
+   * no chamador de `registerCore` esconde. Nenhum dos dois ramos autentica
+   * nem estabelece sessão — ver o comentário de `RegisterCoreResult`.
    */
   async function registerCore(input: {
     email: string;
@@ -203,32 +216,17 @@ export function createAuthRouter({
       // email, nunca na resposta HTTP.
       notifyExistingAccountHolderOfRegistrationAttempt(correlationId);
 
-      // Tentar autenticar com a password submetida também consome a quota
-      // do LOGIN (não só a do registo): sem isto, `/auth/register` seria um
-      // segundo canal de força bruta com orçamento PRÓPRIO, a dobrar o
-      // total de tentativas disponíveis contra a mesma vítima (o registo
-      // tem o seu próprio limitador, por design, para o caso de email
-      // novo). Se a quota de login já estiver esgotada para este par
-      // (ip,email), trata-se exatamente como password errada — nunca se
-      // revela ao chamador que foi a quota, isso seria, por si só, um
-      // oráculo, já que o caminho de email novo nunca faz esta verificação.
-      const loginRate = loginLimiter.check(clientIp(req), email);
-      if (!loginRate.allowed) {
-        return { kind: 'no-session' };
-      }
-
-      try {
-        const tokens = await directGrant(email, password);
-        const session = sessions.create({
-          accessToken: tokens.access_token,
-          refreshToken: tokens.refresh_token,
-          idToken: tokens.id_token,
-          expiresInSeconds: tokens.expiresIn() ?? 300,
-        });
-        return { kind: 'session', session };
-      } catch {
-        return { kind: 'no-session' };
-      }
+      // Consome a quota do LOGIN para este (ip,email) — não só a do
+      // registo: sem isto, `/auth/register` seria um segundo canal de
+      // força bruta com orçamento PRÓPRIO, a dobrar o total de tentativas
+      // disponíveis contra a mesma vítima (o registo tem o seu próprio
+      // limitador, por design, para o caso de email novo). Nunca se chama
+      // `directGrant` aqui: nem para "confirmar" a password, nem para
+      // autenticar — este ramo não estabelece sessão, e uma tentativa de
+      // autenticação real seria trabalho (e um pedido a um IdP) só para
+      // um resultado que a resposta HTTP nunca revela.
+      loginLimiter.check(clientIp(req), email);
+      return { kind: 'conflict' };
     }
 
     const created = { id: result.id };
@@ -258,25 +256,7 @@ export function createAuthRouter({
       throw new RegistrationInfraFailure();
     }
 
-    // Login imediato a seguir ao registo (ADR-0012 D2). Se falhar (não
-    // deveria, dado `emailVerified:false` + `verifyEmail:false` no realm —
-    // ver infra/README.md), o registo já está concluído: devolve-se sucesso
-    // sem sessão para a SPA levar o utilizador ao ecrã de login manual, em
-    // vez de mascarar como falha de registo.
-    try {
-      const tokens = await directGrant(email, password);
-      const session = sessions.create({
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
-        idToken: tokens.id_token,
-        expiresInSeconds: tokens.expiresIn() ?? 300,
-      });
-      return { kind: 'session', session };
-    } catch {
-      // eslint-disable-next-line no-console
-      console.warn('[bff] auth.register: login automático pós-registo falhou', { correlationId });
-      return { kind: 'no-session' };
-    }
+    return { kind: 'created', userId: created.id };
   }
 
   router.post('/register', async (req, res) => {
@@ -343,22 +323,20 @@ export function createAuthRouter({
         correlationId,
       );
 
-      // Corpo LITERALMENTE idêntico nos dois casos — nem sequer `session`
-      // booleano: se ele variasse com `outcome.kind`, o oráculo só teria
-      // mudado de status code para campo do corpo (o email novo autentica
-      // quase sempre com a password que acabou de definir; o email já
-      // registado quase nunca autentica com a password que o requerente
-      // arriscou, que não é a do titular). O cookie de sessão É definido só
-      // quando `outcome.kind === 'session'`, mas isso não é um oráculo novo:
-      // `Set-Cookie` não é legível por JavaScript (forbidden response
-      // header), e confirmar a sessão exige um pedido SEPARADO a `GET
-      // /auth/me` — nesse ponto, saber se a password arriscada autenticou
-      // não dá ao atacante mais do que chamar `/auth/login` diretamente com
-      // o mesmo par (email, password) já dava, sujeito ao mesmo
-      // `loginLimiter` (ver `registerCore`, ramo `conflict`).
-      if (outcome.kind === 'session') {
-        setSessionCookie(res, config, outcome.session.id);
-      }
+      // Resposta LITERALMENTE idêntica nos dois casos — status, corpo E
+      // cabeçalhos, `Set-Cookie` incluído. `outcome.kind` (`'created'` vs.
+      // `'conflict'`) já foi absorvido pela normalização de tempo acima;
+      // aqui serve só para o `void` explícito — nunca chega perto da
+      // resposta HTTP. `/auth/register` não define cookie de sessão em
+      // nenhum ramo: um cliente HTTP de primeira parte (não sujeito à
+      // regra de "forbidden response header" do browser, que só protege
+      // contra leitura CROSS-SITE) conseguia ler `Set-Cookie` em bruto e
+      // usar a sua presença/ausência como oráculo de enumeração — a mesma
+      // classe de defeito que motivou fechar C3.1 no corpo, agora fechada
+      // também no cabeçalho. Quem quer entrar a seguir ao registo chama
+      // `POST /auth/login` com as mesmas credenciais — já indistinguível
+      // por desenho, com o seu próprio limitador.
+      void outcome;
       res.status(201).json({ registered: true });
     } catch (error) {
       if (error instanceof RegistrationInfraFailure) {
