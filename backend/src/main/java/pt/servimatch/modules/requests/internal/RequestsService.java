@@ -15,6 +15,7 @@ import pt.servimatch.modules.uploads.UploadPurpose;
 import pt.servimatch.modules.uploads.UploadsApi;
 import pt.servimatch.modules.requests.ServiceRequestStatus;
 import pt.servimatch.modules.requests.RequestPublished;
+import pt.servimatch.modules.requests.UrgencyLevel;
 import pt.servimatch.modules.requests.internal.web.AddressDto;
 import pt.servimatch.modules.requests.internal.web.CategoryDto;
 import pt.servimatch.modules.requests.internal.web.CreateServiceRequestRequest;
@@ -123,7 +124,7 @@ class RequestsService implements RequestsApi {
                 address.country() == null || address.country().isBlank() ? "PT" : address.country(),
                 location == null ? null : location.lat(),
                 location == null ? null : location.lon(),
-                request.urgency() == null ? "NORMAL" : request.urgency(),
+                (request.urgency() == null ? UrgencyLevel.NORMAL : request.urgency()).name(),
                 request.availability());
 
         UUID requestId = repository.insertDraft(newRequest);
