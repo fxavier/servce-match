@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.util.StreamUtils;
@@ -41,6 +42,18 @@ import java.util.Set;
  * <p>Registado <b>depois</b> da autenticação na cadeia de segurança (ver
  * {@code pt.servimatch.config.SecurityConfig}), para poder isolar a chave
  * por utilizador autenticado e não apenas por IP.
+ *
+ * <p><b>Pedidos sem principal autenticado (incluindo anónimo) não passam por
+ * este filtro.</b> Um balde partilhado por "anonymous" cruzaria pedidos de
+ * clientes não relacionados: um atacante sem token podia semear uma chave
+ * conhecida com uma resposta de erro (ex. {@code 401}) e, se um chamador
+ * legítimo viesse depois a repetir a mesma chave — caso de
+ * {@code POST /v1/webhooks/payments/**}, público por necessidade — receberia
+ * um {@code 409 idempotency-key-conflict} em vez de ser processado,
+ * silenciando um evento nunca persistido. A idempotência de escrita para
+ * pedidos não autenticados, quando necessária, é responsabilidade do próprio
+ * endpoint (ex. a restrição {@code UNIQUE (gateway, raw_event_id)} do
+ * webhook de pagamentos), não deste filtro.
  */
 public class IdempotencyFilter extends OncePerRequestFilter {
 
@@ -60,7 +73,11 @@ public class IdempotencyFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         String idempotencyKey = request.getHeader(properties.headerName());
-        if (!ELIGIBLE_METHODS.contains(request.getMethod()) || idempotencyKey == null || idempotencyKey.isBlank()) {
+        Optional<String> principal = authenticatedPrincipalName();
+        if (!ELIGIBLE_METHODS.contains(request.getMethod())
+                || idempotencyKey == null
+                || idempotencyKey.isBlank()
+                || principal.isEmpty()) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -68,7 +85,7 @@ public class IdempotencyFilter extends OncePerRequestFilter {
         byte[] bodyBytes = StreamUtils.copyToByteArray(request.getInputStream());
         CachedBodyHttpServletRequest wrappedRequest = new CachedBodyHttpServletRequest(request, bodyBytes);
         String requestHash = sha256Hex(bodyBytes);
-        String scopeKey = buildScopeKey(request, idempotencyKey);
+        String scopeKey = buildScopeKey(request, principal.get(), idempotencyKey);
 
         Optional<CachedIdempotentResponse> existing = store.find(scopeKey);
         if (existing.isPresent()) {
@@ -111,17 +128,27 @@ public class IdempotencyFilter extends OncePerRequestFilter {
         response.getOutputStream().write(cached.body());
     }
 
-    private String buildScopeKey(HttpServletRequest request, String idempotencyKey) {
-        String principal = currentPrincipalName();
+    private String buildScopeKey(HttpServletRequest request, String principal, String idempotencyKey) {
         return principal + '|' + request.getMethod() + '|' + request.getRequestURI() + '|' + idempotencyKey;
     }
 
-    private String currentPrincipalName() {
+    /**
+     * Nome do principal autenticado, ou vazio se o pedido não tiver
+     * autenticação real (sem token, ou {@link AnonymousAuthenticationToken}
+     * — este último é o que o Spring Security atribui por omissão a um
+     * pedido sem credenciais, incluindo os endpoints {@code permitAll()}
+     * como o webhook de pagamentos). Nunca se cria uma chave partilhada por
+     * "anonymous": ver javadoc da classe.
+     */
+    private Optional<String> authenticatedPrincipalName() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.isAuthenticated() && authentication.getName() != null) {
-            return authentication.getName();
+        if (authentication == null
+                || !authentication.isAuthenticated()
+                || authentication instanceof AnonymousAuthenticationToken
+                || authentication.getName() == null) {
+            return Optional.empty();
         }
-        return "anonymous";
+        return Optional.of(authentication.getName());
     }
 
     private static String sha256Hex(byte[] bytes) {
