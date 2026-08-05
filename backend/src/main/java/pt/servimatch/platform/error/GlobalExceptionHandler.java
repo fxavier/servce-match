@@ -114,7 +114,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<Object> handleDataIntegrityViolation(DataIntegrityViolationException ex, WebRequest request) {
-        log.warn("Data integrity violation (correlation_id={})", pt.servimatch.platform.observability.CorrelationIdSupport.currentOrNull(), ex);
+        // Nunca passar `ex` como Throwable ao logger: o Logback escreveria a
+        // cadeia de causas via toString(), e a mensagem de uma PSQLException
+        // inclui o DETAIL do servidor — para uma violação de constraint,
+        // literalmente a linha rejeitada. Ver o javadoc de ExceptionLogSupport.
+        log.warn("Data integrity violation (correlation_id={}, {})",
+                pt.servimatch.platform.observability.CorrelationIdSupport.currentOrNull(),
+                ExceptionLogSupport.describe(ex));
         ProblemDetail problemDetail = ProblemDetailsSupport.of(
                 HttpStatus.CONFLICT,
                 ProblemType.CONFLICT,
@@ -126,7 +132,15 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     /** Rede de segurança final: nunca deixa uma exceção não tratada expor detalhe interno. */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Object> handleUnexpected(Exception ex, WebRequest request) {
-        log.error("Unhandled exception (correlation_id={})", pt.servimatch.platform.observability.CorrelationIdSupport.currentOrNull(), ex);
+        // Mesma razão que handleDataIntegrityViolation acima: qualquer
+        // exceção não tratada pode, em teoria, transportar dados de
+        // utilizador na mensagem (não só as de origem JDBC) — não há forma
+        // de o excluir estruturalmente por blocklist de texto livre, por
+        // isso nunca se passa `ex`/`ex.getMessage()` ao logger aqui; só o
+        // allowlist de campos seguros de ExceptionLogSupport.
+        log.error("Unhandled exception (correlation_id={}, {})",
+                pt.servimatch.platform.observability.CorrelationIdSupport.currentOrNull(),
+                ExceptionLogSupport.describe(ex));
         ProblemDetail problemDetail = ProblemDetailsSupport.of(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 ProblemType.INTERNAL,
