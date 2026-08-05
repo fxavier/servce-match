@@ -118,10 +118,17 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-jdbc</artifactId>
     </dependency>
+    <!-- Escopo `compile` (não `runtime`): pt.servimatch.platform.error.ExceptionLogSupport
+         lê org.postgresql.util.PSQLException/ServerErrorMessage em tempo de
+         compilação para extrair só campos de schema (SQLState, nome da
+         constraint/tabela) ao registar uma DataIntegrityViolationException —
+         nunca a mensagem/Detail, que o driver embute com a linha rejeitada.
+         Módulos de domínio continuam a não dever importar org.postgresql.*
+         diretamente (usar Spring Data/JdbcTemplate); isto só alarga o que é
+         *possível* compilar, não o que é aprovado em revisão. -->
     <dependency>
       <groupId>org.postgresql</groupId>
       <artifactId>postgresql</artifactId>
-      <scope>runtime</scope>
     </dependency>
     <dependency>
       <groupId>org.flywaydb</groupId>
